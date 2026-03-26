@@ -4,7 +4,7 @@ OpenClaw Agent Skill — Taiwan professional basketball (PLG + TPBL) stats, scor
 
 ## Version
 
-v0.9
+v1.1.0
 
 ## Usage
 
