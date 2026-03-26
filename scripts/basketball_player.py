@@ -13,11 +13,12 @@
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _basketball_api import get_league_api, LEAGUE_NAMES, normalize_league
+from _basketball_api import get_league_api, LEAGUE_NAMES, normalize_league, disable_cache
 
 
 def fetch_player(league: str, player: str, season=None):
@@ -43,7 +44,14 @@ def main():
     parser.add_argument('--league', '-l', required=True, choices=['plg', 'tpbl', 'all'], help='聯盟 (plg/tpbl/all)')
     parser.add_argument('--player', '-p', required=True, help='球員名稱')
     parser.add_argument('--season', '-s', default=None, help='指定賽季 (如 2023-24)')
+    parser.add_argument('--no-cache', action='store_true', help='停用快取')
+    parser.add_argument('--debug', action='store_true', help='開啟 debug 輸出')
     args = parser.parse_args()
+
+    if args.debug:
+        os.environ['BASKETBALL_DEBUG'] = '1'
+    if args.no_cache:
+        disable_cache()
 
     league = normalize_league(args.league)
     if league == 'all':
@@ -59,3 +67,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

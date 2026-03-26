@@ -6,7 +6,7 @@ tags: ["plg", "tpbl", "basketball", "taiwan", "sports", "scores", "standings"]
 
 # Taiwan Basketball Skill - 台灣職籃資訊查詢 🏀
 
-Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, schedules, and standings.
+Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, schedules, standings, player stats, league leaders, and head-to-head records.
 
 ## Data Sources
 
@@ -19,10 +19,12 @@ Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, sche
 
 | Feature | Script | Source |
 |---------|--------|--------|
-| Schedule | `basketball_schedule.py` | PLG website / TPBL API |
+| Schedule (with countdown) | `basketball_schedule.py` | PLG website / TPBL API |
 | Standings | `basketball_standings.py` | PLG website / TPBL API |
 | Game results | `basketball_games.py` | PLG website / TPBL API |
 | Player stats | `basketball_player.py` | PLG website / TPBL API |
+| League leaders | `basketball_leaders.py` | PLG website / TPBL API |
+| Player comparison | `basketball_compare.py` | PLG website / TPBL API |
 
 ## Quick Start
 
@@ -35,6 +37,8 @@ uv run scripts/basketball_schedule.py --league plg
 uv run scripts/basketball_schedule.py --league tpbl
 uv run scripts/basketball_schedule.py --league all       # PLG + TPBL 合併查詢
 uv run scripts/basketball_schedule.py -l plg --team 勇士
+uv run scripts/basketball_schedule.py -l all --next      # 只顯示下一場比賽及倒數
+uv run scripts/basketball_schedule.py -l all --format table
 ```
 
 ### Standings
@@ -42,6 +46,7 @@ uv run scripts/basketball_schedule.py -l plg --team 勇士
 ```bash
 uv run scripts/basketball_standings.py --league plg
 uv run scripts/basketball_standings.py --league tpbl
+uv run scripts/basketball_standings.py --league plg --format table
 ```
 
 ### Game Results
@@ -52,6 +57,7 @@ uv run scripts/basketball_games.py --league tpbl
 uv run scripts/basketball_games.py --league all            # PLG + TPBL 合併查詢
 uv run scripts/basketball_games.py --league all --last 5   # 最近 5 場結果
 uv run scripts/basketball_games.py -l tpbl --team 戰神
+uv run scripts/basketball_games.py -l all --last 10 --format table
 ```
 
 ### Player Stats
@@ -64,22 +70,65 @@ uv run scripts/basketball_player.py -l plg -p 林書豪 --season 2023-24
 uv run scripts/basketball_player.py -l tpbl -p 夢想家           # 球隊搜尋
 ```
 
+### League Leaders（排行榜）
+
+```bash
+uv run scripts/basketball_leaders.py --league plg --stat pts          # PLG 得分王
+uv run scripts/basketball_leaders.py --league tpbl --stat reb --top 5 # TPBL 籃板前5名
+uv run scripts/basketball_leaders.py -l tpbl -s ast --format table    # 表格輸出
+uv run scripts/basketball_leaders.py -l all -s pts --top 10           # 雙聯盟得分榜
+```
+
+Supported `--stat` values: `pts`（得分）、`reb`（籃板）、`ast`（助攻）、`stl`（抄截）、`blk`（阻攻）、`tov`（失誤）、`pf`（犯規）、`eff`（效率值，TPBL 限定）
+
+### Player Comparison（球員比較）
+
+```bash
+uv run scripts/basketball_compare.py --league plg --player1 林書豪 --player2 戴維斯
+uv run scripts/basketball_compare.py -l tpbl -p1 林志傑 -p2 陳盈駿
+uv run scripts/basketball_compare.py -l plg -p1 林書豪 -p2 戴維斯 --season 2023-24
+uv run scripts/basketball_compare.py -l plg -p1 林書豪 -p2 戴維斯 --format table
+```
+
 Supports fuzzy search by player name or team name. Returns per-season stats (GP, avg minutes/pts/reb/ast/stl/blk, FG/3P/FT splits, efficiency, PIR) plus career totals.
 
 - **PLG**: Scrapes `/stat-player` + `/all-players` for player index, then `/player/{ID}` for detailed per-season stats.
-- **TPBL**: Queries `/games/stats/players?division_id={id}` for all divisions across all seasons. Falls back to `/players/{id}` for historical data. Returns accumulated + average + percentage stats.
+- **TPBL**: Queries `/games/stats/players?division_id={id}` for all divisions across all seasons. Recalculates FG%/3P%/FT% from accumulated makes/attempts for cross-division accuracy.
 
 ## CLI Parameters
 
 | Script | Param | Description |
 |--------|-------|-------------|
 | All | `--league`, `-l` | `plg`, `tpbl`, or `all` |
-| All | `--team`, `-t` | Team name filter (supports aliases) |
+| All | `--format`, `-f` | `json` (預設) or `table` (ASCII 表格) |
+| All | `--no-cache` | 停用磁碟快取 |
+| All | `--debug` | 輸出 debug 訊息（或設 `BASKETBALL_DEBUG=1`）|
+| schedule, games | `--team`, `-t` | Team name filter (supports aliases) |
+| `basketball_schedule.py` | `--next` | 只顯示下一場比賽及倒數計時 |
 | `basketball_games.py` | `--last`, `-n` | Show only last N results (default: all) |
 | `basketball_player.py` | `--player`, `-p` | Player name to search |
 | `basketball_player.py` | `--season`, `-s` | Filter by season (e.g., `2023-24`) |
+| `basketball_leaders.py` | `--stat`, `-s` | Stat category (pts/reb/ast/stl/blk/tov/pf/eff) |
+| `basketball_leaders.py` | `--top`, `-n` | Show top N players (default: 10) |
+| `basketball_compare.py` | `--player1`, `-p1` | First player name |
+| `basketball_compare.py` | `--player2`, `-p2` | Second player name |
+| `basketball_compare.py` | `--season`, `-s` | Compare a specific season (default: career) |
 
 Output JSON includes a `league` field per game when using `--league all`.
+
+## Caching
+
+Results are cached on disk at `~/.cache/taiwan-basketball/` with the following TTLs:
+
+| Data type | TTL |
+|-----------|-----|
+| Schedule | 5 minutes |
+| Game results | 10 minutes |
+| Standings | 10 minutes |
+| Player stats | 1 hour |
+| League leaders | 10 minutes |
+
+Use `--no-cache` to bypass cache, or set `BASKETBALL_DEBUG=1` to see cache hits/misses.
 
 ## League Codes
 
@@ -123,5 +172,9 @@ Auto-installed via `uv`:
 
 - **PLG**: Server-side rendered HTML, no JS needed. Standings page has full table.
 - **TPBL**: Official REST API at `api.tpbl.basketball`. Player stats via `/games/stats/players?division_id={id}` across all seasons.
+- **Retry**: All HTTP requests retry up to 3 times with exponential backoff on network errors.
+- **FG% accuracy**: TPBL percentage stats (FG%/3P%/FT%) are recalculated from cumulative makes/attempts for cross-division accuracy.
+- **Season format**: TPBL seasons display as `YY/YY` (e.g., `24/25`); PLG seasons as `YYYY-YY` (e.g., `2023-24`).
 - SBL (超級籃球聯賽) is not supported — official site (sleague.tw) is a Vue SPA with authenticated GraphQL API.
 - `avg_minutes` output is unified to `MM:SS` format for both leagues.
+
