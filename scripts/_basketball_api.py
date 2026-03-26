@@ -744,7 +744,7 @@ class PLGAPI:
                 venue = ''
 
                 if score_div:
-                    score_h6s = score_div.find_all('h6', class_='ff8bit')
+                    score_h6s = [h for h in score_div.find_all('h6', class_='ff8bit') if 'MOBILE_only' not in (h.get('class') or [])]
                     if len(score_h6s) >= 2:
                         try:
                             away_score = int(score_h6s[0].get_text(strip=True))
