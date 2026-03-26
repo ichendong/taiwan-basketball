@@ -25,6 +25,7 @@ Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, sche
 | Player stats | `basketball_player.py` | PLG website / TPBL API |
 | League leaders | `basketball_leaders.py` | PLG website / TPBL API |
 | Player comparison | `basketball_compare.py` | PLG website / TPBL API |
+| Boxscore (per-game) | `basketball_boxscore.py` | PLG API / TPBL API |
 
 ## Quick Start
 
@@ -90,6 +91,19 @@ uv run scripts/basketball_compare.py -l plg -p1 林書豪 -p2 戴維斯 --season
 uv run scripts/basketball_compare.py -l plg -p1 林書豪 -p2 戴維斯 --format table
 ```
 
+### Boxscore（單場球員數據）
+
+```bash
+uv run scripts/basketball_boxscore.py -l plg -g 693            # PLG 用 gohoops game ID
+uv run scripts/basketball_boxscore.py -l tpbl -g 1371          # TPBL 用 API game ID
+uv run scripts/basketball_boxscore.py -l plg -g 693 -f table   # 表格輸出
+uv run scripts/basketball_boxscore.py -l plg -g 693 --tab Q1   # 單節數據
+uv run scripts/basketball_boxscore.py -l plg -g 693 --all      # 包含 DNP 球員
+```
+
+- **PLG**: 個別球員完整數據（得分、籃板、助攻、EFF、+/- 等），透過 `/api/boxscore.preciser.php` 取得。
+- **TPBL**: 僅提供球隊級別每節統計（得分、FG、籃板、助攻等），無個別球員數據。
+
 Supports fuzzy search by player name or team name. Returns per-season stats (GP, avg minutes/pts/reb/ast/stl/blk, FG/3P/FT splits, efficiency, PIR) plus career totals.
 
 - **PLG**: Scrapes `/stat-player` + `/all-players` for player index, then `/player/{ID}` for detailed per-season stats.
@@ -113,6 +127,9 @@ Supports fuzzy search by player name or team name. Returns per-season stats (GP,
 | `basketball_compare.py` | `--player1`, `-p1` | First player name |
 | `basketball_compare.py` | `--player2`, `-p2` | Second player name |
 | `basketball_compare.py` | `--season`, `-s` | Compare a specific season (default: career) |
+| `basketball_boxscore.py` | `--game`, `-g` | Game ID (PLG: gohoops ID, TPBL: API ID) |
+| `basketball_boxscore.py` | `--tab` | Stats period: Q1/Q2/Q3/Q4/1st_half/2nd_half/TOTAL (default: TOTAL) |
+| `basketball_boxscore.py` | `--all` | Include DNP (did not play) players |
 
 Output JSON includes a `league` field per game when using `--league all`.
 
