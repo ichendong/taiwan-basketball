@@ -547,6 +547,51 @@ class TPBLAPI:
             } if career_gp > 0 else None,
         }
 
+    def get_boxscore(self, game_id: str) -> dict:
+        """取得單場比賽統計（TPBL 僅提供球隊級別數據，無個別球員數據）
+
+        Args:
+            game_id: TPBL 比賽 ID（數字）
+        """
+        data = self._fetch_json(f'/games/{game_id}/stats', ttl=CACHE_TTL['games'])
+        home_team = data.get('home_team') or {}
+        away_team = data.get('away_team') or {}
+        home_teams = home_team.get('teams', {})
+        away_teams = away_team.get('teams', {})
+
+        def _round_stats(teams_data: dict) -> list[dict]:
+            rounds = []
+            for rnd_key in sorted(teams_data.get('rounds', {}).keys(), key=int):
+                rnd = teams_data['rounds'][rnd_key]
+                rounds.append({
+                    'quarter': int(rnd_key),
+                    'score': rnd.get('won_score'),
+                    'opponent_score': rnd.get('lost_score'),
+                    'fg': rnd.get('field_goals'),
+                    'fg_pct': rnd.get('field_goals_percentage'),
+                    'fg2': rnd.get('two_pointers'),
+                    'fg3': rnd.get('three_pointers'),
+                    'ft': rnd.get('free_throws'),
+                    'reb': rnd.get('rebounds'),
+                    'ast': rnd.get('assists'),
+                    'stl': rnd.get('steals'),
+                    'blk': rnd.get('blocks'),
+                    'tov': rnd.get('turnovers'),
+                    'pf': rnd.get('fouls'),
+                })
+            return rounds
+
+        return {
+            'game_id': game_id,
+            'home_team': home_team.get('name', ''),
+            'away_team': away_team.get('name', ''),
+            'home_quarters': _round_stats(home_teams),
+            'away_quarters': _round_stats(away_teams),
+            'home_total': home_teams.get('total'),
+            'away_total': away_teams.get('total'),
+            'note': 'TPBL API 僅提供球隊級別統計，無個別球員數據',
+        }
+
     def get_results(self, season_id: Optional[int] = None, team: Optional[str] = None) -> list[dict]:
         games = self.get_games(season_id)
         results = []
@@ -945,6 +990,68 @@ class PLGAPI:
                 'message': f'找到 {len(matches)} 位球員，請指定 player_id',
             }
         return self.get_player_stats_by_id(matches[0]['player_id'], season)
+
+    def get_boxscore(self, game_id: str, tab: str = 'TOTAL') -> dict:
+        """取得單場比賽 boxscore 數據
+
+        Args:
+            game_id: PLG 比賽 ID（如 '693'）
+            tab: 統計區間，支援 Q1/Q2/Q3/Q4/1st_half/2nd_half/TOTAL
+        """
+        api_tab = tab.lower()  # API requires lowercase
+        url = f'{self.BASE_URL}/api/boxscore.preciser.php?id={game_id}&away_tab={api_tab}&home_tab={api_tab}'
+        resp = _fetch_json_url(url, ttl=CACHE_TTL['games'])
+        if resp.get('error'):
+            return {'error': resp['error'], 'game_id': game_id}
+        data = resp['data']
+        return {
+            'game_id': game_id,
+            'score_home': data.get('score_home'),
+            'score_away': data.get('score_away'),
+            'quarters': {
+                'q1': {'home': data.get('q1_home'), 'away': data.get('q1_away')},
+                'q2': {'home': data.get('q2_home'), 'away': data.get('q2_away')},
+                'q3': {'home': data.get('q3_home'), 'away': data.get('q3_away')},
+                'q4': {'home': data.get('q4_home'), 'away': data.get('q4_away')},
+            },
+            'home_players': self._parse_boxscore_players(data.get('home', [])),
+            'away_players': self._parse_boxscore_players(data.get('away', [])),
+            'home_total': data.get('home_total'),
+            'away_total': data.get('away_total'),
+        }
+
+    @staticmethod
+    def _parse_boxscore_players(players: list[dict]) -> list[dict]:
+        """解析 PLG boxscore 球員數據"""
+        result = []
+        for p in players:
+            entry = {
+                'player_id': p.get('player_id'),
+                'name': p.get('name_alt') or p.get('name', ''),
+                'jersey': p.get('jersey', ''),
+                'starter': p.get('starter'),
+                'mins': p.get('mins'),
+                'dnp': p.get('mins') == 'DNP',
+                'pts': _safe_int(p.get('points')) if p.get('points') not in ('', None) else None,
+                'fg2': p.get('two_m_two'),
+                'fg2_pct': p.get('twop'),
+                'fg3': p.get('trey_m_trey'),
+                'fg3_pct': p.get('treyp'),
+                'ft': p.get('ft_m_ft'),
+                'ft_pct': p.get('ftp'),
+                'reb': _safe_int(p.get('reb')) if p.get('reb') not in ('', None) else None,
+                'orb': _safe_int(p.get('reb_o')) if p.get('reb_o') not in ('', None) else None,
+                'drb': _safe_int(p.get('reb_d')) if p.get('reb_d') not in ('', None) else None,
+                'ast': _safe_int(p.get('ast')) if p.get('ast') not in ('', None) else None,
+                'stl': _safe_int(p.get('stl')) if p.get('stl') not in ('', None) else None,
+                'blk': _safe_int(p.get('blk')) if p.get('blk') not in ('', None) else None,
+                'tov': _safe_int(p.get('turnover')) if p.get('turnover') not in ('', None) else None,
+                'pf': _safe_int(p.get('pfoul')) if p.get('pfoul') not in ('', None) else None,
+                'eff': _safe_int(p.get('eff')) if p.get('eff') not in ('', None) else None,
+                'plus_minus': _safe_int(p.get('positive')) if p.get('positive') not in ('', None) else None,
+            }
+            result.append(entry)
+        return result
 
     def get_league_leaders(self, stat: str = 'pts', top_n: int = 10) -> list[dict]:
         """取得 PLG 聯盟排行榜（依指定數據欄位排序）
