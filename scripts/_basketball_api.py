@@ -213,12 +213,17 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return default
 
-
 # ─── 表格格式化工具 ───
 
+import unicodedata as _unicodedata
+
+
 def _str_display_width(s: str) -> int:
-    """計算字串顯示寬度（CJK 字元佔 2 格）"""
-    return sum(2 if ord(c) > 0x7F else 1 for c in s)
+    """計算字串顯示寬度（East Asian Wide/Fullwidth 字元佔 2 格，其餘佔 1 格）"""
+    return sum(
+        2 if _unicodedata.east_asian_width(c) in ('W', 'F') else 1
+        for c in s
+    )
 
 
 def format_table(data: list[dict], columns: Optional[list[str]] = None,
@@ -379,10 +384,11 @@ class TPBLAPI:
     def _season_label_to_short(label: str) -> str:
         """'2024-2025 賽季' → '24/25'"""
         clean = label.replace(' 賽季', '').strip()
-        m = re.search(r'\d{2}(\d{2})-\d{2}(\d{2})', clean)
+        m = re.search(r'(\d{4})-(\d{4})', clean)
         if m:
-            return f'{m.group(1)}/{m.group(2)}'
+            return f'{m.group(1)[-2:]}/{m.group(2)[-2:]}'
         return clean
+
 
     def get_player_stats(self, name: str, season: str | None = None) -> dict:
         """從 TPBL 官方 API 查詢球員數據"""
@@ -666,15 +672,16 @@ class PLGAPI:
             if m:
                 start = int(m.group(1))
                 end = 2000 + int(m.group(2))
-                # 驗證合理性（不超過當前年+2）
+                # 驗證合理性：end 必須是 start+1，且不超過當前年±2
                 current_year = date.today().year
-                if current_year - 2 <= start <= current_year + 2:
+                if end == start + 1 and current_year - 2 <= start <= current_year + 1:
                     return start, end
         # fallback: 當前跨年邏輯
         today = date.today()
         if today.month >= 10:
             return today.year, today.year + 1
         return today.year - 1, today.year
+
 
     def get_games(self) -> list[dict]:
         """解析賽程頁面（/schedule），回傳所有比賽"""
@@ -1094,11 +1101,11 @@ def get_head_to_head(games: list[dict], team_a: str, team_b: str) -> dict:
     for g in h2h_games:
         home = g.get('home_team', '')
         away = g.get('away_team', '')
-        hs = _safe_int(g.get('home_score', 0))
-        as_ = _safe_int(g.get('away_score', 0))
-        if hs == as_:
+        home_score = _safe_int(g.get('home_score', 0))
+        away_score = _safe_int(g.get('away_score', 0))
+        if home_score == away_score:
             continue
-        winner = home if hs > as_ else away
+        winner = home if home_score > away_score else away
         if team_a in winner:
             wins_a += 1
         elif team_b in winner:

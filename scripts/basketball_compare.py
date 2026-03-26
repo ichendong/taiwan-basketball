@@ -88,7 +88,9 @@ def _fmt(val: Any) -> str:
     if val is None or val == '-':
         return '-'
     if isinstance(val, float):
-        if val < 1:
+        # Percentage stats (FG%, 3P%, FT%) are stored as ratios (0.0–1.0);
+        # counting stats (pts, reb, etc.) are >= 1.0. Use < 1.0 to distinguish.
+        if val < 1.0:
             return f'{val:.1%}'
         return f'{val:.1f}'
     return str(val)
@@ -168,7 +170,8 @@ def main():
                     'team': team1,
                     'number': info1.get('number', ''),
                     'position': info1.get('position', ''),
-                    'height': info1.get('height') or info1.get('height_cm', ''),
+                    # PLG uses 'height' (string), TPBL uses 'height_cm' (numeric)
+                    'height': info1.get('height') if info1.get('height') is not None else info1.get('height_cm', ''),
                     'stats': stats1,
                 },
                 {
@@ -176,7 +179,7 @@ def main():
                     'team': team2,
                     'number': info2.get('number', ''),
                     'position': info2.get('position', ''),
-                    'height': info2.get('height') or info2.get('height_cm', ''),
+                    'height': info2.get('height') if info2.get('height') is not None else info2.get('height_cm', ''),
                     'stats': stats2,
                 },
             ],

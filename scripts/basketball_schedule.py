@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -22,6 +23,29 @@ from _basketball_api import (
     get_league_api, LEAGUE_NAMES, resolve_team, normalize_league,
     disable_cache, get_next_game, format_table,
 )
+
+
+def _add_countdown(game: dict) -> None:
+    """為單場比賽加上倒數計時欄位（in-place）"""
+    try:
+        game_dt = datetime.fromisoformat(
+            f"{game['date']}T{game.get('time', '00:00') or '00:00'}:00"
+        )
+        total_seconds = int((game_dt - datetime.now()).total_seconds())
+        if total_seconds > 0:
+            days = total_seconds // 86400
+            hours = (total_seconds % 86400) // 3600
+            minutes = (total_seconds % 3600) // 60
+            if days > 0:
+                game['countdown'] = f'{days} 天 {hours} 小時後'
+            elif hours > 0:
+                game['countdown'] = f'{hours} 小時 {minutes} 分鐘後'
+            else:
+                game['countdown'] = f'{minutes} 分鐘後'
+        else:
+            game['countdown'] = '即將開始'
+    except (ValueError, KeyError):
+        pass
 
 _SCHEDULE_COLUMNS = ['league', 'date', 'weekday', 'time', 'away_team', 'home_team', 'venue', 'countdown']
 _SCHEDULE_HEADERS = {
@@ -99,11 +123,9 @@ def main():
             else:
                 output = []
         else:
-            # 加入倒數資訊（所有場次）
+            # 為每場比賽加上倒數計時
             for g in all_schedule:
-                ng = get_next_game([g])
-                if ng and 'countdown' in ng:
-                    g['countdown'] = ng['countdown']
+                _add_countdown(g)
             output = all_schedule
 
         if not output:
