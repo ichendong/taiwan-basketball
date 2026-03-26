@@ -614,6 +614,7 @@ class TPBLAPI:
                 'home_score': _safe_int(home.get('won_score', 0)),
                 'venue': g.get('venue', ''),
                 'round': g.get('round'),
+                'game_id': str(g.get('id', '')),
             })
         return results
 
