@@ -1,0 +1,72 @@
+{
+  "projectName": "taiwan-basketball",
+  "branchName": "fix/won-score-and-data-fetching",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "修復 PLG won_score bug",
+      "criteria": [
+        "PLG API 的 get_results() 中 won_score 欄位只存贏家分數，導致 home_score 和 away_score 都顯示同一個值（如 117:117 應為 117:108）",
+        "需要找到 PLG 賽程頁面中各隊實際分數的正確欄位名稱（可能在 game boxscore 或 JSON 資料中）",
+        "修復後執行 uv run scripts/basketball_games.py -l plg --last 3 確認分數正確",
+        "同時檢查 get_schedule() 和 get_standings() 是否也有類似問題"
+      ],
+      "priority": 1,
+      "status": "pending",
+      "failedAttempts": 0
+    },
+    {
+      "id": "TASK-002",
+      "title": "PLG boxscore 個別球員數據抓取",
+      "criteria": [
+        "PLG 官網 game 頁面的球員數據表格是 JS 動態載入的（靜態 HTML 抓不到）",
+        "需要找到 PLG 的隱藏 API endpoint（可能類似 TPBL 的 REST API）來取得 boxscore 數據",
+        "在 _basketball_api.py 新增 get_boxscore(game_id) 方法，回傳兩隊球員的詳細數據（得分、籃板、助攻、抄截、阻攻、命中率等）",
+        "新增 scripts/basketball_boxscore.py CLI 腳本支援 --league plg --game-id G32 查詢",
+        "測試：uv run scripts/basketball_boxscore.py -l plg --game-id G32 確認有球員數據回傳"
+      ],
+      "priority": 2,
+      "status": "pending",
+      "failedAttempts": 0
+    },
+    {
+      "id": "TASK-003",
+      "title": "TPBL boxscore 個別球員數據抓取",
+      "criteria": [
+        "TPBL 官方 API (api.tpbl.basketball) 可能有 boxscore endpoint",
+        "調查 TPBL API 的 games/{game_id} 或類似路徑是否有球員層級數據",
+        "在 TPBLAPI 新增 get_boxscore(game_id) 方法",
+        "basketball_boxscore.py 同時支援 --league tpbl",
+        "測試：uv run scripts/basketball_boxscore.py -l tpbl --game-id <id> 確認有球員數據回傳"
+      ],
+      "priority": 3,
+      "status": "pending",
+      "failedAttempts": 0
+    },
+    {
+      "id": "TASK-004",
+      "title": "更新 SKILL.md 文件",
+      "criteria": [
+        "SKILL.md 加入 boxscore 功能說明與使用範例",
+        "更新 Features 表格加入 Boxscore 項目",
+        "在 Quick Start 加入 basketball_boxscore.py 的指令範例",
+        "更新 CLI Parameters 表格"
+      ],
+      "priority": 4,
+      "status": "pending",
+      "failedAttempts": 0
+    },
+    {
+      "id": "TASK-005",
+      "title": "加入 boxscore 到 --league all 支援",
+      "criteria": [
+        "basketball_games.py 的輸出加入 game_id 欄位（如果還沒有的話）",
+        "basketball_boxscore.py 支援 --league all 加上 game_id 直接查詢",
+        "確保 table 格式輸出正常顯示球員數據"
+      ],
+      "priority": 5,
+      "status": "pending",
+      "failedAttempts": 0
+    }
+  ]
+}
