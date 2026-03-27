@@ -346,18 +346,22 @@ class TPBLAPI:
             away_score = _safe_int(away_info.get('won_score', 0))
             for name in (home, away):
                 if name not in teams:
-                    teams[name] = {'team': name, 'wins': 0, 'losses': 0}
+                    teams[name] = {'team': name, 'wins': 0, 'losses': 0, 'gp': 0}
+            teams[home]['gp'] += 1
+            teams[away]['gp'] += 1
             if home_score > away_score:
                 teams[home]['wins'] += 1
                 teams[away]['losses'] += 1
             else:
                 teams[away]['wins'] += 1
                 teams[home]['losses'] += 1
-        standings = sorted(teams.values(), key=lambda x: (-x['wins'], x['losses']))
-        for i, t in enumerate(standings, 1):
+        # 先算勝率，再依勝率排序
+        for t in teams.values():
             total = t['wins'] + t['losses']
-            t['rank'] = i
             t['win_rate'] = round(t['wins'] / total, 3) if total else 0
+        standings = sorted(teams.values(), key=lambda x: (-x['win_rate'], -x['wins'], x['losses']))
+        for i, t in enumerate(standings, 1):
+            t['rank'] = i
         return standings
 
     def get_games(self, season_id: Optional[int] = None) -> list[dict]:

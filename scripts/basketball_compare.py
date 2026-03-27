@@ -40,16 +40,43 @@ STAT_DISPLAY_NAMES: dict[str, str] = {
 
 
 def _extract_career_stats(info: dict) -> dict[str, Any]:
-    """從球員資料中提取生涯場均數據"""
+    """從球員資料中提取生涯場均數據，統一 PLG/TPBL 格式"""
     career = info.get('career') or {}
-    # 嘗試從最新賽季取得更多欄位
     seasons = info.get('seasons') or []
     latest = seasons[-1] if seasons else {}
+
+    # TPBL career 直接有 avg_pts/avg_reb/avg_ast 等
+    # PLG career 只有 total_pts/total_reb/total_ast + gp，需自己算 avg
+    gp = career.get('gp')
+    if gp and gp != '-' and isinstance(gp, (int, float)) and gp > 0:
+        # TPBL path: career already has avg fields
+        avg_pts = career.get('avg_pts', '-')
+        avg_reb = career.get('avg_reb', '-')
+        avg_ast = career.get('avg_ast', '-')
+    elif gp and isinstance(gp, (int, float)) and gp > 0:
+        avg_pts = career.get('avg_pts', '-')
+        avg_reb = career.get('avg_reb', '-')
+        avg_ast = career.get('avg_ast', '-')
+    else:
+        # PLG path: career may have total_* + gp, or nothing
+        total_pts = career.get('total_pts')
+        total_reb = career.get('total_reb')
+        total_ast = career.get('total_ast')
+        career_gp = career.get('gp')
+        if career_gp and isinstance(career_gp, (int, float)) and career_gp > 0:
+            avg_pts = round(total_pts / career_gp, 1) if isinstance(total_pts, (int, float)) else '-'
+            avg_reb = round(total_reb / career_gp, 1) if isinstance(total_reb, (int, float)) else '-'
+            avg_ast = round(total_ast / career_gp, 1) if isinstance(total_ast, (int, float)) else '-'
+        else:
+            avg_pts = '-'
+            avg_reb = '-'
+            avg_ast = '-'
+
     return {
-        'gp': career.get('gp', '-'),
-        'avg_pts': career.get('avg_pts', '-'),
-        'avg_reb': career.get('avg_reb', '-'),
-        'avg_ast': career.get('avg_ast', '-'),
+        'gp': gp if gp and gp != '-' else '-',
+        'avg_pts': avg_pts,
+        'avg_reb': avg_reb,
+        'avg_ast': avg_ast,
         'avg_stl': latest.get('avg_stl', '-'),
         'avg_blk': latest.get('avg_blk', '-'),
         'avg_tov': latest.get('avg_tov', '-'),
@@ -84,13 +111,14 @@ def _extract_season_stats(info: dict, season: str) -> dict[str, Any]:
     return {k: '-' for k in STAT_DISPLAY_NAMES}
 
 
-def _fmt(val: Any) -> str:
+_PCT_KEYS = {'fg2_pct', 'fg3_pct', 'ft_pct'}
+
+
+def _fmt(val: Any, key: str = '') -> str:
     if val is None or val == '-':
         return '-'
     if isinstance(val, float):
-        # Percentage stats (FG%, 3P%, FT%) are stored as ratios (0.0–1.0);
-        # counting stats (pts, reb, etc.) are >= 1.0. Use < 1.0 to distinguish.
-        if val < 1.0:
+        if key in _PCT_KEYS:
             return f'{val:.1%}'
         return f'{val:.1f}'
     return str(val)
@@ -191,8 +219,8 @@ def main():
 
             rows = []
             for key, label in STAT_DISPLAY_NAMES.items():
-                v1 = _fmt(stats1.get(key))
-                v2 = _fmt(stats2.get(key))
+                v1 = _fmt(stats1.get(key), key)
+                v2 = _fmt(stats2.get(key), key)
                 rows.append({'數據': label, name1: v1, name2: v2})
 
             print(format_table(rows, ['數據', name1, name2]))
