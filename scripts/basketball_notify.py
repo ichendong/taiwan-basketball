@@ -42,6 +42,7 @@ from _basketball_api import (
     get_league_api, LEAGUE_NAMES, normalize_league, resolve_team,
     disable_cache, format_table, fetch_leagues_parallel,
 )
+from _utils import parse_game_datetime
 from _db import (
     add_subscription, remove_subscription, get_subscriptions,
     save_games,
@@ -84,9 +85,7 @@ def _get_upcoming_for_team(league: str, team: str, within_hours: float) -> list[
         if team and team not in away and team not in home:
             continue
         try:
-            game_dt = datetime.fromisoformat(
-                f"{g['date']}T{g.get('time', '00:00') or '00:00'}:00"
-            )
+            game_dt = parse_game_datetime(g['date'], g.get('time', ''))
             if now <= game_dt <= deadline:
                 seconds_left = int((game_dt - now).total_seconds())
                 g = dict(g)

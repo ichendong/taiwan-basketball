@@ -10,7 +10,10 @@ from typing import Any, Optional
 
 from _cache import CACHE_TTL, _debug_log
 from _http import _fetch_html
-from _utils import PLG_SHORT_NAMES, _safe_float, _safe_int, resolve_team
+from _utils import PLG_SHORT_NAMES, _safe_float, _safe_int, resolve_team, parse_game_datetime
+
+# 比賽開始後最多幾秒視為「進行中」（3 小時）
+_LIVE_GAME_WINDOW_SECONDS = 10800
 
 
 class PLGAPI:
@@ -235,10 +238,10 @@ class PLGAPI:
             if not time_str:
                 continue
             try:
-                game_dt = datetime.fromisoformat(f"{g['date']}T{time_str}:00")
+                game_dt = parse_game_datetime(g['date'], g.get('time', ''))
                 elapsed = (now - game_dt).total_seconds()
-                # 比賽開始後 0-180 分鐘視為進行中
-                if 0 <= elapsed <= 10800:
+                # 比賽開始後 0-_LIVE_GAME_WINDOW_SECONDS 秒視為進行中
+                if 0 <= elapsed <= _LIVE_GAME_WINDOW_SECONDS:
                     live.append({
                         'game_id': g.get('game_id', ''),
                         'date': g['date'],

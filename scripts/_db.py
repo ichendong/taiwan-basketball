@@ -223,6 +223,11 @@ def get_latest_standings(league: str) -> list[dict]:
         return []
 
 
+def _row_count_changed(conn: sqlite3.Connection) -> bool:
+    """回傳最後一次 DML 操作是否影響了任何行"""
+    return conn.execute('SELECT changes() as c').fetchone()['c'] > 0
+
+
 # ─── 訂閱管理 ───
 
 def add_subscription(team: str, league: str) -> bool:
@@ -234,9 +239,7 @@ def add_subscription(team: str, league: str) -> bool:
                 (team, league),
             )
             conn.commit()
-            return conn.execute(
-                'SELECT changes() as c'
-            ).fetchone()['c'] > 0
+            return _row_count_changed(conn)
     except sqlite3.Error:
         return False
 
@@ -250,7 +253,7 @@ def remove_subscription(team: str, league: str) -> bool:
                 (team, league),
             )
             conn.commit()
-            return conn.execute('SELECT changes() as c').fetchone()['c'] > 0
+            return _row_count_changed(conn)
     except sqlite3.Error:
         return False
 

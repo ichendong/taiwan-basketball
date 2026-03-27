@@ -5,7 +5,7 @@
 
 import unicodedata as _unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 
 # ─── 球隊別名對照表 ───
@@ -56,6 +56,21 @@ def _sec_to_mmss(seconds: float) -> str:
     """秒數轉 MM:SS 格式"""
     s = round(seconds)
     return f'{s // 60}:{s % 60:02d}'
+
+
+def parse_game_datetime(date_str: str, time_str: str) -> 'datetime':
+    """將日期字串與時間字串解析為 datetime 物件
+
+    Args:
+        date_str: ISO 格式日期，如 '2026-01-15'
+        time_str: 'HH:MM' 格式時間，如 '18:30'，空字串則視為 '00:00'
+
+    Returns:
+        datetime 物件
+    """
+    from datetime import datetime
+    t = time_str or '00:00'
+    return datetime.fromisoformat(f'{date_str}T{t}:00')
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -149,7 +164,11 @@ def format_table(
 
 # ─── 並行擷取輔助 ───
 
-def fetch_leagues_parallel(leagues: list[str], fetch_fn, max_workers: int = 4) -> list[tuple]:
+def fetch_leagues_parallel(
+    leagues: list[str],
+    fetch_fn: Callable[[str], Any],
+    max_workers: int = 4,
+) -> list[tuple]:
     """並行呼叫 fetch_fn(league) 並收集結果
 
     Args:
