@@ -18,7 +18,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _basketball_api import get_league_api, LEAGUE_NAMES, disable_cache, format_table
+from _basketball_api import (
+    get_league_api, LEAGUE_NAMES, normalize_league, disable_cache,
+    format_table, fetch_leagues_parallel,
+)
 
 _STANDINGS_COLUMNS = ['rank', 'team', 'gp', 'wins', 'losses', 'win_rate']
 _STANDINGS_HEADERS = {
@@ -39,8 +42,8 @@ def main():
     )
 
     parser.add_argument('--league', '-l', type=str, required=True,
-                        choices=['plg', 'tpbl'],
-                        help='聯盟代碼')
+                        choices=['plg', 'tpbl', 'all'],
+                        help='聯盟代碼（all = PLG + TPBL）')
     parser.add_argument('--format', '-f', type=str, default='json',
                         choices=['json', 'table'], help='輸出格式（預設 json）')
     parser.add_argument('--no-cache', action='store_true', help='停用快取')
@@ -53,17 +56,27 @@ def main():
     if args.no_cache:
         disable_cache()
 
-    league_name = LEAGUE_NAMES.get(args.league, args.league)
-    print(f'✅ 聯盟：{league_name}', file=sys.stderr)
+    leagues = ['plg', 'tpbl'] if args.league == 'all' else [normalize_league(args.league)]
 
     try:
-        api = get_league_api(args.league)
-        standings = api.get_standings()
+        def _fetch_standings(league: str) -> list:
+            api = get_league_api(league)
+            standings = api.get_standings()
+            for s in standings:
+                s['league'] = league
+            return standings
+
+        all_standings = []
+        for league, standings in fetch_leagues_parallel(leagues, _fetch_standings):
+            print(f'✅ 聯盟：{LEAGUE_NAMES.get(league, league)}', file=sys.stderr)
+            all_standings.extend(standings)
 
         if args.format == 'table':
-            print(format_table(standings, _STANDINGS_COLUMNS, _STANDINGS_HEADERS))
+            cols = _STANDINGS_COLUMNS if len(leagues) == 1 else ['league'] + _STANDINGS_COLUMNS
+            headers = dict(_STANDINGS_HEADERS, league='聯盟')
+            print(format_table(all_standings, cols, headers))
         else:
-            print(json.dumps(standings, ensure_ascii=False, indent=2))
+            print(json.dumps(all_standings, ensure_ascii=False, indent=2))
     except Exception as e:
         print(json.dumps({'error': str(e)}, ensure_ascii=False), file=sys.stderr)
         sys.exit(1)

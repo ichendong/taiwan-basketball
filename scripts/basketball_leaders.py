@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _basketball_api import get_league_api, LEAGUE_NAMES, disable_cache, format_table
+from _basketball_api import get_league_api, LEAGUE_NAMES, disable_cache, format_table, fetch_leagues_parallel
 
 STAT_DISPLAY = {
     'pts': '得分', 'reb': '籃板', 'ast': '助攻',
@@ -72,14 +72,20 @@ def main():
     stat_name = STAT_DISPLAY.get(args.stat, args.stat)
 
     try:
-        all_leaders = []
-        for league in leagues:
-            league_display = LEAGUE_NAMES.get(league, league)
-            print(f'✅ 聯盟：{league_display}　統計：{stat_name}', file=sys.stderr)
+        stat_arg = args.stat
+        top_arg = args.top
+
+        def _fetch_leaders(league: str) -> list:
             api = get_league_api(league)
-            leaders = api.get_league_leaders(stat=args.stat, top_n=args.top)
+            leaders = api.get_league_leaders(stat=stat_arg, top_n=top_arg)
             for p in leaders:
                 p['league'] = league
+            return leaders
+
+        all_leaders = []
+        for league, leaders in fetch_leagues_parallel(leagues, _fetch_leaders):
+            league_display = LEAGUE_NAMES.get(league, league)
+            print(f'✅ 聯盟：{league_display}　統計：{stat_name}', file=sys.stderr)
             all_leaders.extend(leaders)
 
         # 跨聯盟時重新排序
