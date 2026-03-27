@@ -256,13 +256,6 @@ def main() -> None:
         ''',
     )
 
-    parser.add_argument(
-        '--format', '-f', default='json',
-        choices=['json', 'table'], help='輸出格式（預設 json）',
-    )
-    parser.add_argument('--no-cache', action='store_true', help='停用快取')
-    parser.add_argument('--debug', action='store_true', help='開啟 debug 輸出')
-
     subparsers = parser.add_subparsers(dest='command', help='子命令')
 
     # check
@@ -276,6 +269,12 @@ def main() -> None:
         '--league', '-l', default='all',
         choices=['plg', 'tpbl', 'all'], help='聯盟（預設 all）',
     )
+    p_check.add_argument(
+        '--format', '-f', default='json',
+        choices=['json', 'table'], help='輸出格式（預設 json）',
+    )
+    p_check.add_argument('--no-cache', action='store_true', help='停用快取')
+    p_check.add_argument('--debug', action='store_true', help='開啟 debug 輸出')
 
     # add
     p_add = subparsers.add_parser('add', help='新增球隊訂閱')
@@ -284,6 +283,8 @@ def main() -> None:
         '--league', '-l', required=True,
         choices=['plg', 'tpbl'], help='聯盟代碼',
     )
+    p_add.add_argument('--no-cache', action='store_true', help='停用快取')
+    p_add.add_argument('--debug', action='store_true', help='開啟 debug 輸出')
 
     # remove
     p_remove = subparsers.add_parser('remove', help='移除球隊訂閱')
@@ -292,6 +293,8 @@ def main() -> None:
         '--league', '-l', required=True,
         choices=['plg', 'tpbl'], help='聯盟代碼',
     )
+    p_remove.add_argument('--no-cache', action='store_true', help='停用快取')
+    p_remove.add_argument('--debug', action='store_true', help='開啟 debug 輸出')
 
     # list
     p_list = subparsers.add_parser('list', help='列出所有訂閱')
@@ -299,12 +302,18 @@ def main() -> None:
         '--league', '-l', default='all',
         choices=['plg', 'tpbl', 'all'], help='聯盟過濾（預設全部）',
     )
+    p_list.add_argument(
+        '--format', '-f', default='json',
+        choices=['json', 'table'], help='輸出格式（預設 json）',
+    )
+    p_list.add_argument('--no-cache', action='store_true', help='停用快取')
+    p_list.add_argument('--debug', action='store_true', help='開啟 debug 輸出')
 
     args = parser.parse_args()
 
-    if args.debug:
+    if getattr(args, 'debug', False):
         os.environ['BASKETBALL_DEBUG'] = '1'
-    if args.no_cache:
+    if getattr(args, 'no_cache', False):
         disable_cache()
 
     if args.command == 'check':
