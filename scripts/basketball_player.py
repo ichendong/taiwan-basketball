@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _basketball_api import get_league_api, LEAGUE_NAMES, normalize_league, disable_cache
+from _basketball_api import get_league_api, LEAGUE_NAMES, normalize_league, disable_cache, fetch_leagues_parallel
 
 
 def fetch_player(league: str, player: str, season=None):
@@ -55,10 +55,15 @@ def main():
 
     league = normalize_league(args.league)
     if league == 'all':
+        player_arg = args.player
+        season_arg = args.season
+
+        def _fetch_player(lg: str) -> dict:
+            return fetch_player(lg, player_arg, season_arg)
+
         results = []
-        for lg in ('plg', 'tpbl'):
-            r = fetch_player(lg, args.player, args.season)
-            results.append(r)
+        for _, result in fetch_leagues_parallel(['plg', 'tpbl'], _fetch_player):
+            results.append(result)
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
         result = fetch_player(league, args.player, args.season)

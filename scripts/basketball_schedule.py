@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from _basketball_api import (
     get_league_api, LEAGUE_NAMES, resolve_team, normalize_league,
-    disable_cache, get_next_game, format_table,
+    disable_cache, get_next_game, format_table, fetch_leagues_parallel,
 )
 
 
@@ -98,17 +98,21 @@ def main():
     try:
         leagues = ['plg', 'tpbl'] if args.league == 'all' else [normalize_league(args.league)]
 
-        all_schedule = []
-        for league in leagues:
-            print(f'✅ 聯盟：{LEAGUE_NAMES.get(league, league)}', file=sys.stderr)
+        def _fetch_schedule(league: str) -> list:
             api = get_league_api(league)
             schedule = api.get_schedule()
             for s in schedule:
                 s['league'] = league
-
             if team:
-                schedule = [g for g in schedule
-                           if team in g.get('away_team', '') or team in g.get('home_team', '')]
+                schedule = [
+                    g for g in schedule
+                    if team in g.get('away_team', '') or team in g.get('home_team', '')
+                ]
+            return schedule
+
+        all_schedule = []
+        for league, schedule in fetch_leagues_parallel(leagues, _fetch_schedule):
+            print(f'✅ 聯盟：{LEAGUE_NAMES.get(league, league)}', file=sys.stderr)
             all_schedule.extend(schedule)
 
         all_schedule.sort(key=lambda x: (x.get('date', ''), x.get('time', '')))

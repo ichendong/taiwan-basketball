@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from _basketball_api import (
     get_league_api, LEAGUE_NAMES, resolve_team, normalize_league,
-    disable_cache, format_table,
+    disable_cache, format_table, fetch_leagues_parallel,
 )
 
 _GAMES_COLUMNS = ['league', 'date', 'weekday', 'away_team', 'away_score', 'home_score', 'home_team', 'venue']
@@ -80,10 +80,12 @@ def main():
     try:
         leagues = ['plg', 'tpbl'] if args.league == 'all' else [normalize_league(args.league)]
 
+        def _fetch_results(league: str) -> list:
+            return fetch_results(league, team)
+
         all_results = []
-        for league in leagues:
+        for league, results in fetch_leagues_parallel(leagues, _fetch_results):
             print(f'✅ 聯盟：{LEAGUE_NAMES.get(league, league)}', file=sys.stderr)
-            results = fetch_results(league, team)
             all_results.extend(results)
 
         # 按日期排序（最新在前）
