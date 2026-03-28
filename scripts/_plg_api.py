@@ -150,11 +150,14 @@ class PLGAPI:
                 venue = ''
 
                 if score_div:
-                    score_h6s = score_div.find_all('h6', class_='ff8bit')
-                    if len(score_h6s) >= 2:
+                    score_cols = score_div.find_all('div', class_=re.compile(r'col-md-4'))
+                    if len(score_cols) >= 3:
                         try:
-                            away_score = int(score_h6s[0].get_text(strip=True))
-                            home_score = int(score_h6s[1].get_text(strip=True))
+                            away_score_el = score_cols[0].find('h6', class_=re.compile(r'ff8bit'))
+                            home_score_el = score_cols[2].find('h6', class_=re.compile(r'ff8bit'))
+                            if away_score_el and home_score_el:
+                                away_score = int(away_score_el.get_text(strip=True))
+                                home_score = int(home_score_el.get_text(strip=True))
                         except ValueError:
                             pass
 
