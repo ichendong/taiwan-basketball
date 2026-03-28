@@ -177,12 +177,14 @@ class PLGAPI:
                 }
 
                 if away_score is not None and home_score is not None:
-                    if away_score == 0 and home_score == 0:
-                        game['status'] = 'postponed'
-                    else:
+                    # PLG 官網未開打比賽也顯示 0:0
+                    # 完賽：至少一方分數 > 0；未打：0:0
+                    if away_score > 0 or home_score > 0:
                         game['away_score'] = away_score
                         game['home_score'] = home_score
                         game['status'] = 'completed'
+                    else:
+                        game['status'] = 'upcoming'
                 else:
                     game['status'] = 'upcoming'
 
