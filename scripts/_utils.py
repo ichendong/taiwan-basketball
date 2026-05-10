@@ -51,6 +51,18 @@ LEAGUE_NAMES = {
     'tpbl': '台灣職業籃球大聯盟',
 }
 
+
+def normalize_team_name(name: str) -> str:
+    """正規化球隊名稱，移除常見後綴"""
+    if not name:
+        return name
+    # 移除常見後綴（順序重要，先移除最長的）
+    suffixes = ['籃球隊', '籃球隊']  # 繁體/簡體
+    for suffix in suffixes:
+        if name.endswith(suffix):
+            return name[:-len(suffix)]
+    return name
+
 STAGE_NAMES = {
     'preseason': '熱身賽',
     'regular': '例行賽',

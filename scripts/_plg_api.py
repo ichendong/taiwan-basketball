@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from _cache import CACHE_TTL, _debug_log
 from _http import _fetch_html
-from _utils import PLG_SHORT_NAMES, _safe_float, _safe_int, resolve_team, parse_game_datetime
+from _utils import PLG_SHORT_NAMES, _safe_float, _safe_int, resolve_team, parse_game_datetime, normalize_team_name as _normalize_team_name
 
 # 比賽開始後最多幾秒視為「進行中」（3 小時）
 _LIVE_GAME_WINDOW_SECONDS = 10800
@@ -471,7 +471,11 @@ class PLGAPI:
                 if len(cells) >= 2:
                     key, val = cells[0], cells[1]
                     if key == '球隊':
-                        info['team'] = val.split('\n')[0].strip()
+                        # 只取中文隊名，移除英文跟籃球隊後綴
+                        team_zh = val.split('\n')[0].strip()
+                        # 移除英文名（空格+大寫英文開頭 或直接大寫英文開頭）
+                        team_zh = re.sub(r'\s*[A-Z][a-zA-Z].*', '', team_zh)
+                        info['team'] = _normalize_team_name(team_zh)
                     elif key == '背號':
                         info['number'] = val
                     elif key == '位置':
@@ -489,7 +493,14 @@ class PLGAPI:
         if title:
             t = title.get_text(strip=True)
             if '|' in t:
-                info['name'] = t.split('|')[0].strip()
+                name_raw = t.split('|')[0].strip()
+                # 移除球隊後綴，只留球員名
+                # 格式：「球員名 - 球隊名」或「球員名 - 球隊名籃球隊」
+                if ' - ' in name_raw:
+                    player_name = name_raw.split(' - ')[0].strip()
+                    info['name'] = player_name
+                else:
+                    info['name'] = _normalize_team_name(name_raw)
 
         # ─── 解析經歷區塊（球隊歷史）───
         experience = []
@@ -576,7 +587,53 @@ class PLGAPI:
                 career = s
                 break
 
-        # ─── 解析經歷區塊（球隊歷史）並推算每季效力球隊 ───
+        # ─── 從 preciser API 逐場數據提取每季效力球隊（主來源） ───
+        # 解析球員頁面裡的 getPlayerData 呼叫，找到 preciser API URL
+        preciser_teams: dict[str, str] = {}  # season -> team
+        preciser_match = re.search(
+            r"getPlayerData\s*\(\s*['\"](.*?)['\"]",
+            html
+        )
+        if preciser_match:
+            api_path = preciser_match.group(1)
+            # 只取例行賽（type=REGULAR）
+            if 'type=REGULAR' in api_path:
+                api_url = f'{self.BASE_URL}{api_path}'
+                try:
+                    preciser_raw = _fetch_html(api_url, ttl=CACHE_TTL['player'])
+                    import json as _json
+                    try:
+                        preciser_data = _json.loads(preciser_raw)
+                        match_html = preciser_data.get('data', {}).get('match', '')
+                        if match_html:
+                            from bs4 import BeautifulSoup as _BS2
+                            match_soup = _BS2(match_html, 'lxml')
+                            for row in match_soup.find_all('tr'):
+                                cells = [c.get_text(strip=True) for c in row.find_all('td')]
+                                # 逐場: 日期 | 效力球隊 | 對手 | ...
+                                if len(cells) >= 2:
+                                    team_name = cells[1].strip()
+                                    date_str = cells[0].strip()
+                                    if team_name and team_name != 'loading...' and date_str:
+                                        try:
+                                            parts = date_str.split('-')
+                                            yr = int(parts[0])
+                                            mn = int(parts[1])
+                                            # PLG 賽季跨年：10月開始 ~ 次年6月
+                                            if mn >= 10:
+                                                season_key = f'{yr}-{yr + 1 - 2000:02d}'
+                                            else:
+                                                season_key = f'{yr - 1}-{yr - 2000:02d}'
+                                            preciser_teams[season_key] = team_name
+                                            break  # 第一場就夠了
+                                        except (ValueError, IndexError):
+                                            pass
+                    except (_json.JSONDecodeError, ValueError):
+                        pass
+                except (urllib.error.URLError, urllib.error.HTTPError):
+                    pass
+
+        # ─── 解析經歷區塊（球隊歷史）作為 fallback ───
         experience = []
         exp_div = soup.find('div', id='player_experience')
         if exp_div:
@@ -592,7 +649,6 @@ class PLGAPI:
                     continue
                 if not in_experience:
                     continue
-                # 格式：「YYYY-YY 聯盟 球隊名」或「YYYY-YYYY 聯盟 球隊名」
                 m = re.match(r'(\d{4}-\d{2,4})\s+(\S+)\s+(.+)', line)
                 if m:
                     experience.append({
@@ -603,16 +659,14 @@ class PLGAPI:
         if experience:
             info['experience'] = experience
 
-        # 用經歷推算每季效力球隊（覆蓋主頁顯示的現役球隊）
+        # 用經歷推算每季效力球隊（fallback）
         def _team_for_season(season: str, exp_list: list) -> str:
             """根據經歷列表推算指定賽季的球隊"""
             for exp in exp_list:
                 period = exp['period']
-                # 處理 '2022-24' 格式 → (2022, 2024)
                 parts = period.split('-')
                 start_year = int(parts[0])
                 end_year = int(parts[0][:2] + parts[1]) if len(parts[1]) == 2 else int(parts[1])
-                # 處理 season 格式 '2022-23' → (2022, 2023)
                 s_parts = season.split('-')
                 s_start = int(s_parts[0])
                 s_end = int(s_parts[0][:2] + s_parts[1]) if len(s_parts[1]) == 2 else int(s_parts[1])
@@ -622,10 +676,26 @@ class PLGAPI:
 
         for s in regular:
             sn = s.get('season', '')
-            if sn and sn != 'career' and experience:
+            if not sn or sn == 'career':
+                continue
+            # 優先使用 preciser API 的逐場數據
+            if sn in preciser_teams:
+                s['team'] = preciser_teams[sn]
+            elif experience:
                 team_from_exp = _team_for_season(sn, experience)
                 if team_from_exp:
                     s['team'] = team_from_exp
+            # 正規化球隊名稱（移除「籃球隊」等後綴）
+            if s.get('team'):
+                s['team'] = _normalize_team_name(s['team'])
+
+        # 經歷也正規化
+        for exp in experience:
+            exp['team'] = _normalize_team_name(exp['team'])
+
+        # info['team'] 也正規化
+        if info.get('team'):
+            info['team'] = _normalize_team_name(info['team'])
 
         info['seasons'] = regular
         info['career'] = career
