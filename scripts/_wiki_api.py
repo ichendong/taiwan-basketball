@@ -1,6 +1,14 @@
 """
 台灣籃球維基館 (wikibasketball) API 模組
 使用 Camoufox 繞過 Anubis 防護機制
+
+主要用途：
+1. 球員經歷（跨聯盟球隊歷史）
+2. 球員獎項紀錄
+3. T1 聯盟歷史數據（已消失聯盟）
+4. 本土球員詳細資料
+
+洋將可能不在維基館，以本土球員為主。
 """
 
 import json
@@ -17,9 +25,8 @@ CAMOUFOX_VENV = '/home/ichen/.openclaw/workspace/skills/cpbl/.venv'
 def _get_camoufox():
     """取得 Camoufox 模組（需要 CPBL skill 的 venv）"""
     import sys
-    venv_lib = f'{CAMOUFOX_VENV}/lib'
-    # 找到正確的 site-packages
     import os
+    venv_lib = f'{CAMOUFOX_VENV}/lib'
     for d in os.listdir(venv_lib):
         if d.startswith('python3.'):
             site_packages = f'{venv_lib}/{d}/site-packages'
@@ -36,13 +43,184 @@ def _wiki_url(title: str) -> str:
     return f'{WIKI_BASE}?title={encoded}'
 
 
-def _wiki_search_url(query: str) -> str:
-    """建構搜尋 URL"""
-    encoded = urllib.parse.quote(query)
-    return f'{WIKI_BASE}?title=特殊:搜尋&search={encoded}'
+def _parse_experience(dl_element) -> list[dict]:
+    """解析經歷區塊的 <dl><dd><ul><li> 結構
+
+    格式：聯盟球隊（年份～年份）或 聯盟球隊A→球隊B（年份～）
+    """
+    results = []
+    if not dl_element:
+        return results
+
+    for li in dl_element.find_all('li'):
+        text = li.get_text(strip=True)
+        if not text:
+            continue
+
+        org_team = ''
+        start_year = 0
+        end_year = 0
+
+        # 格式1：聯盟+球隊（YYYY年～YYYY年）
+        m = re.match(r'(.+?)（(\d{4})年～(\d{4})年）', text)
+        if m:
+            org_team = m.group(1).strip()
+            start_year = int(m.group(2))
+            end_year = int(m.group(3))
+        else:
+            # 格式2：聯盟+球隊（YYYY年）只有一年
+            m = re.match(r'(.+?)（(\d{4})年）', text)
+            if m:
+                org_team = m.group(1).strip()
+                start_year = int(m.group(2))
+                end_year = start_year
+            else:
+                # 格式3：聯盟+球隊（YYYY年～）無結束年份，代表仍在效力
+                m = re.match(r'(.+?)（(\d{4})年～）', text)
+                if m:
+                    org_team = m.group(1).strip()
+                    start_year = int(m.group(2))
+                    end_year = start_year  # 仍在效力
+                else:
+                    continue
+
+        # 分離聯盟和球隊
+        league_prefixes = [
+            'P. LEAGUE+', '台灣職業籃球大聯盟', 'T1聯盟',
+            '超級籃球聯賽', 'NBA', 'NCAA', 'CBA',
+            '東亞超級聯賽', '丹麥籃球聯賽', '義大利籃球乙級聯賽',
+            '加拿大精英籃球聯賽', '美國職籃發展聯盟', '美國職籃',
+            '亞洲俱樂部冠軍聯賽',
+        ]
+
+        league = ''
+        team = org_team
+        for prefix in sorted(league_prefixes, key=len, reverse=True):
+            if org_team.startswith(prefix):
+                league = prefix
+                team = org_team[len(prefix):].strip()
+                break
+
+        # 處理球隊更名：A→B
+        teams = [t.strip() for t in team.split('→')] if '→' in team else [team]
+
+        results.append({
+            'league': league,
+            'team': team,
+            'teams': teams,
+            'start_year': start_year,
+            'end_year': end_year,
+            'raw': text,
+        })
+
+    return results
 
 
-def search_player_wiki(name: str) -> list[dict]:
+def _parse_awards(content_div) -> list[str]:
+    """解析特殊事蹟/獎項"""
+    awards = []
+
+    # 找「特殊事蹟」h2
+    for heading in content_div.find_all('h2'):
+        span = heading.find('span', class_='mw-headline')
+        if span and ('特殊事蹟' in span.get_text() or '獎項' in span.get_text()):
+            dl = heading.find_next_sibling('dl')
+            if dl:
+                for dd in dl.find_all('dd'):
+                    text = dd.get_text(strip=True)
+                    if text and ('年度' in text or '王' in text or '獎' in text or '最佳' in text or '入選' in text):
+                        awards.append(text)
+            break
+
+    return awards
+
+
+def get_player_wiki(name: str) -> dict[str, Any]:
+    """從台灣籃球維基館抓取球員資料
+
+    Returns:
+        dict with keys: name, found, experience, awards, wiki_url
+    """
+    Camoufox = _get_camoufox()
+    result: dict[str, Any] = {
+        'name': name,
+        'found': False,
+        'experience': [],
+        'awards': [],
+        'wiki_url': _wiki_url(name),
+        'league': 'wiki',
+    }
+
+    with Camoufox(headless=True) as browser:
+        page = browser.new_page()
+
+        # 嘗試直接訪問球員頁面
+        page.goto(_wiki_url(name), timeout=60000)
+        page.wait_for_timeout(10000)
+
+        content_div = page.query_selector('#mw-content-text')
+        if not content_div:
+            browser.close()
+            return result
+
+        text = content_div.inner_text()
+
+        # 如果頁面不存在，嘗試搜尋
+        if '沒有內容' in text or '此頁目前沒有內容' in text:
+            page.goto(
+                f'{WIKI_BASE}?title=特殊:搜尋&search={urllib.parse.quote(name)}',
+                timeout=60000,
+            )
+            page.wait_for_timeout(10000)
+            text = content_div.inner_text()
+
+            # 嘗試找到匹配的結果
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(page.content(), 'lxml')
+
+            # 搜尋結果中的連結
+            for link in soup.find_all('a', href=True):
+                href = link['href']
+                title_text = link.get_text(strip=True)
+                if name in title_text and '/wiki/' in href:
+                    # 找到匹配的頁面，重新訪問
+                    full_url = f'https://wikibasketball.dils.tku.edu.tw{href}' if href.startswith('/') else href
+                    page.goto(full_url, timeout=60000)
+                    page.wait_for_timeout(10000)
+                    content_div = page.query_selector('#mw-content-text')
+                    text = content_div.inner_text()
+                    result['wiki_url'] = full_url
+                    result['name'] = title_text
+                    break
+            else:
+                browser.close()
+                return result
+
+        result['found'] = True
+
+        # 用 BeautifulSoup 解析 HTML
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(page.content(), 'lxml')
+        content = soup.find('div', id='mw-content-text')
+
+        # 1. 解析經歷
+        for heading in content.find_all('h2'):
+            span = heading.find('span', class_='mw-headline')
+            if span and '經歷' in span.get_text() and '籃球' not in span.get_text():
+                dl = heading.find_next_sibling('dl')
+                if dl:
+                    result['experience'] = _parse_experience(dl)
+                break
+
+        # 2. 解析獎項
+        result['awards'] = _parse_awards(content)
+
+        browser.close()
+
+    return result
+
+
+def search_player_wiki(name: str, limit: int = 10) -> list[dict]:
     """搜尋台灣籃球維基館的球員頁面
 
     Returns:
@@ -53,159 +231,42 @@ def search_player_wiki(name: str) -> list[dict]:
 
     with Camoufox(headless=True) as browser:
         page = browser.new_page()
-        page.goto(_wiki_search_url(name), timeout=60000)
+        page.goto(
+            f'{WIKI_BASE}?title=特殊:搜尋&search={urllib.parse.quote(name)}',
+            timeout=60000,
+        )
         page.wait_for_timeout(10000)
 
-        text = page.inner_text('#mw-content-text')
-        # 解析搜尋結果
-        # 格式：每行一個結果，包含標題和摘要
-        lines = text.split('\n')
-        current_title = None
-        current_snippet = []
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(page.content(), 'lxml')
+        content = soup.find('div', class_='searchresults')
 
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            # 搜尋結果通常有 KB 大小標記
-            kb_match = re.search(r'\(\d+.*?個字\)', line)
-            if kb_match and current_title:
-                results.append({
-                    'title': current_title,
-                    'url': _wiki_url(current_title),
-                    'snippet': ' '.join(current_snippet)[:200],
-                })
-                current_title = None
-                current_snippet = []
-                continue
-            # 第一行通常是標題
-            if current_title is None:
-                current_title = line
-            else:
-                current_snippet.append(line)
+        if not content:
+            # 嘗試另一種結構
+            content = soup.find('div', id='mw-content-text')
 
-        # 最後一個結果
-        if current_title:
-            results.append({
-                'title': current_title,
-                'url': _wiki_url(current_title),
-                'snippet': ' '.join(current_snippet)[:200],
-            })
+        if content:
+            for link in content.find_all('a', href=True):
+                href = link['href']
+                title = link.get_text(strip=True)
+                if '/wiki/' in href and title and name in title:
+                    full_url = f'https://wikibasketball.dils.tku.edu.tw{href}' if href.startswith('/') else href
+                    snippet = ''
+                    # 找摘要
+                    parent = link.find_parent('div')
+                    if parent:
+                        snippet = parent.get_text(strip=True)[:200]
+                    results.append({
+                        'title': title,
+                        'url': full_url,
+                        'snippet': snippet,
+                    })
+                    if len(results) >= limit:
+                        break
+
+        browser.close()
 
     return results
-
-
-def get_player_wiki(name: str) -> dict[str, Any]:
-    """從台灣籃球維基館抓取球員資料
-
-    Returns:
-        dict with keys: name, experience, career_stats, awards, wiki_url
-    """
-    Camoufox = _get_camoufox()
-    result: dict[str, Any] = {
-        'name': name,
-        'league': 'wiki',
-        'experience': [],
-        'awards': [],
-        'career_stats': {},
-        'wiki_url': _wiki_url(name),
-    }
-
-    with Camoufox(headless=True) as browser:
-        # 先嘗試直接訪問球員頁面
-        page = browser.new_page()
-        page.goto(_wiki_url(name), timeout=60000)
-        page.wait_for_timeout(10000)
-
-        text = page.inner_text('#mw-content-text')
-
-        # 如果頁面不存在，嘗試搜尋
-        if '沒有內容' in text or '此頁目前沒有內容' in text:
-            page.goto(_wiki_search_url(name), timeout=60000)
-            page.wait_for_timeout(10000)
-            text = page.inner_text('#mw-content-text')
-
-            # 嘗試找到第一個匹配的結果並訪問
-            lines = text.split('\n')
-            for line in lines:
-                line = line.strip()
-                if name in line and '個字' not in line:
-                    # 嘗試訪問這個頁面
-                    try:
-                        page.goto(_wiki_url(line), timeout=60000)
-                        page.wait_for_timeout(10000)
-                        text = page.inner_text('#mw-content-text')
-                        result['wiki_url'] = _wiki_url(line)
-                        result['name'] = line
-                        break
-                    except Exception:
-                        continue
-                    break
-
-        # 解析經歷
-        lines = text.split('\n')
-        in_experience = False
-        for line in lines:
-            line = line.strip()
-            if line.startswith('經歷') or line == '經歷':
-                in_experience = True
-                continue
-            if in_experience:
-                if line.startswith('生涯') or line.startswith('獲') or line.startswith('特殊'):
-                    in_experience = False
-                    continue
-                # 格式：YYYY年 -- 描述 或 YYYY-YYYY -- 描述
-                m = re.match(r'(\d{4})(?:-(\d{4}))?\s*年?\s*--\s*(.+)', line)
-                if m:
-                    start = m.group(1)
-                    end = m.group(2) or m.group(1)
-                    desc = m.group(3).strip()
-                    result['experience'].append({
-                        'period': f'{start}-{end}' if end != start else start,
-                        'description': desc,
-                    })
-
-        # 解析獎項
-        in_awards = False
-        for line in lines:
-            line = line.strip()
-            if '年度' in line and ('最有價值' in line or '最佳' in line or '王' in line or '獎' in line):
-                in_awards = True
-            if in_awards:
-                if '——' in line or '--' in line:
-                    result['awards'].append(line)
-                elif re.match(r'\d{4}年', line):
-                    result['awards'].append(line)
-
-        # 解析生涯成績表格
-        in_stats = False
-        current_league = ''
-        for line in lines:
-            line = line.strip()
-            if '例行賽' in line and ('P. LEAGUE' in line or 'TPBL' in line or 'SBL' in line or 'T1' in line):
-                current_league = line.strip('：:').strip()
-                in_stats = True
-                result['career_stats'][current_league] = []
-                continue
-            if in_stats and line.startswith('年度'):
-                continue  # header
-            if in_stats and line.startswith('總計'):
-                in_stats = False
-                continue
-            if in_stats and '\t' in line:
-                # 資料行
-                parts = line.split('\t')
-                if len(parts) >= 5:
-                    result['career_stats'][current_league].append({
-                        'season': parts[0],
-                        'team': parts[1] if len(parts) > 1 else '',
-                        'number': parts[2] if len(parts) > 2 else '',
-                        'gp': parts[3] if len(parts) > 3 else '',
-                    })
-            if in_stats and line == '' or '編輯' in line:
-                in_stats = False
-
-    return result
 
 
 if __name__ == '__main__':
