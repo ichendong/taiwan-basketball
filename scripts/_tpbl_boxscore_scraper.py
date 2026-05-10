@@ -1,8 +1,8 @@
 """
-TPBL Box Score Scraper — 使用 Camoufox 渲染 JS 頁面抓取球員數據
+TPBL Box Score Scraper — 使用 Scrapling StealthyFetcher 渲染 JS 頁面抓取球員數據
 
 TPBL 官方 API 不開放 box score 端點，但官網頁面有 JS 渲染的完整數據表格。
-此模組用 Camoufox 爬取 https://tpbl.basketball/schedule/{game_id}/box-score 取得球員統計。
+此模組用 Scrapling StealthyFetcher 爬取 https://tpbl.basketball/schedule/{game_id}/box-score 取得球員統計。
 """
 
 import json
@@ -10,8 +10,8 @@ import re
 import urllib.parse
 from typing import Any, Optional
 
-# Camoufox venv 路徑（共用 CPBL skill 的 venv）
-CAMOUFOX_VENV = '/home/ichen/.openclaw/workspace/skills/cpbl/.venv'
+# Scrapling venv 路徑（共用 CPBL skill 的 venv）
+SCRAPLING_VENV = '/home/ichen/.openclaw/workspace/skills/cpbl/.venv'
 
 TPBL_BOXSCORE_URL = 'https://tpbl.basketball/schedule/{game_id}/box-score'
 
@@ -24,19 +24,19 @@ def _debug_log(msg: str) -> None:
         print(f'[DEBUG] {msg}', file=sys.stderr)
 
 
-def _get_camoufox():
-    """取得 Camoufox 模組（需要 CPBL skill 的 venv）"""
+def _get_stealthy_fetcher():
+    """取得 Scrapling StealthyFetcher（需要 CPBL skill 的 venv）"""
     import sys
     import os
-    venv_lib = f'{CAMOUFOX_VENV}/lib'
+    venv_lib = f'{SCRAPLING_VENV}/lib'
     for d in os.listdir(venv_lib):
         if d.startswith('python3.'):
             site_packages = f'{venv_lib}/{d}/site-packages'
             if os.path.isdir(site_packages) and site_packages not in sys.path:
                 sys.path.insert(0, site_packages)
             break
-    from camoufox.sync_api import Camoufox
-    return Camoufox
+    from scrapling.fetchers import StealthyFetcher
+    return StealthyFetcher
 
 
 def _parse_player_row(cells: list[str], team: str) -> dict:
@@ -118,63 +118,52 @@ def _parse_player_row(cells: list[str], team: str) -> dict:
 
 
 def scrape_boxscore(game_id: int, timeout: int = 30000) -> list[dict]:
-    """用 Camoufox 爬取 TPBL box score 頁面，回傳所有球員數據
+    """用 Scrapling StealthyFetcher 爬取 TPBL box score 頁面，回傳所有球員數據
 
     Args:
         game_id: TPBL 比賽 ID
-        timeout: Camoufox 頁面載入 timeout（毫秒）
+        timeout: StealthyFetcher 頁面載入 timeout（毫秒）
 
     Returns:
         球員資料 list，每筆含 name, number, team, pts, reb, ast, ...
     """
-    Camoufox = _get_camoufox()
+    StealthyFetcher = _get_stealthy_fetcher()
     url = TPBL_BOXSCORE_URL.format(game_id=game_id)
 
     players = []
 
-    with Camoufox(
-        headless=True,
-        humanize=False,
-        block_images=True,
-    ) as browser:
-        page = browser.new_page()
-        page.set_default_timeout(timeout)
-        page.goto(url, wait_until='networkidle')
+    page = StealthyFetcher.fetch(url, headless=True, wait=10000)
 
-        # 等表格渲染出來
-        page.wait_for_selector('table#vgt-table', timeout=timeout)
+    # 抓球員數據表格 — 用 CSS 選擇器
+    tables = page.css('table#vgt-table')
 
-        # 從 score table 抓隊伍名稱
-        team_names = []
-        score_table = page.query_selector('table.w-full')
-        if score_table:
-            for row in score_table.query_selector_all('tbody tr'):
-                name_el = row.query_selector('.team-name h6')
-                if name_el:
-                    team_names.append(name_el.inner_text().strip())
+    # 從 score table 抓隊伍名稱
+    team_names = []
+    score_table = page.css('table.w-full')
+    if score_table:
+        rows = score_table[0].css('tbody tr')
+        for row in rows:
+            name_el = row.css('.team-name h6')
+            if name_el:
+                team_names.append(name_el[0].get_all_text().strip())
 
-        _debug_log(f'TPBL boxscore: teams from score table: {team_names}')
+    _debug_log(f'TPBL boxscore: teams from score table: {team_names}')
 
-        # 抓球員數據 table
-        # 只抓有 vgt-table class 的 table（跳過 score table）
-        tables = page.query_selector_all('table#vgt-table')
-        for table_idx, table in enumerate(tables):
-            # score table 順序：[國王, 雲豹]
-            # player table 0 = 雲豹（先攻/客隊）, player table 1 = 國王（後攻/主隊）
-            # 所以反轉對應：table 0 → team index 1, table 1 → team index 0
-            team_idx = 1 - table_idx
-            team_name = team_names[team_idx] if 0 <= team_idx < len(team_names) else f'Team {table_idx}'
+    for table_idx, table_el in enumerate(tables):
+        # score table 順序：[國王, 雲豹]
+        # player table 0 = 雲豹（先攻/客隊）, player table 1 = 國王（後攻/主隊）
+        # 所以反轉對應：table 0 → team index 1, table 1 → team index 0
+        team_idx = 1 - table_idx
+        team_name = team_names[team_idx] if 0 <= team_idx < len(team_names) else f'Team {table_idx}'
 
-            # 抓所有 row（跳過 header row）
-            rows = table.query_selector_all('tbody tr')
-            for row in rows:
-                cells = row.query_selector_all('th, td')
-                cell_texts = [cell.inner_text().strip() for cell in cells]
-                parsed = _parse_player_row(cell_texts, team_name)
-                if parsed:
-                    players.append(parsed)
-
-        browser.close()
+        # 抓所有 row（跳過 header row）
+        rows = table_el.css('tbody tr')
+        for row in rows:
+            cells = row.css('th, td')
+            cell_texts = [cell.get_all_text().strip() for cell in cells]
+            parsed = _parse_player_row(cell_texts, team_name)
+            if parsed:
+                players.append(parsed)
 
     return players
 

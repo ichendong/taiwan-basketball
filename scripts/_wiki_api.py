@@ -1,6 +1,6 @@
 """
 台灣籃球維基館 (wikibasketball) API 模組
-使用 Camoufox 繞過 Anubis 防護機制
+使用 Scrapling StealthyFetcher 繞過 Anubis 防護機制
 
 主要用途：
 1. 球員經歷（跨聯盟球隊歷史）
@@ -18,23 +18,23 @@ from typing import Any
 
 WIKI_BASE = 'https://wikibasketball.dils.tku.edu.tw/wiki/index.php'
 
-# Camoufox venv 路徑（共用 CPBL skill 的 venv）
-CAMOUFOX_VENV = '/home/ichen/.openclaw/workspace/skills/cpbl/.venv'
+# Scrapling venv 路徑（共用 CPBL skill 的 venv）
+SCRAPLING_VENV = '/home/ichen/.openclaw/workspace/skills/cpbl/.venv'
 
 
-def _get_camoufox():
-    """取得 Camoufox 模組（需要 CPBL skill 的 venv）"""
+def _get_stealthy_fetcher():
+    """取得 Scrapling StealthyFetcher（需要 CPBL skill 的 venv）"""
     import sys
     import os
-    venv_lib = f'{CAMOUFOX_VENV}/lib'
+    venv_lib = f'{SCRAPLING_VENV}/lib'
     for d in os.listdir(venv_lib):
         if d.startswith('python3.'):
             site_packages = f'{venv_lib}/{d}/site-packages'
             if os.path.isdir(site_packages) and site_packages not in sys.path:
                 sys.path.insert(0, site_packages)
             break
-    from camoufox.sync_api import Camoufox
-    return Camoufox
+    from scrapling.fetchers import StealthyFetcher
+    return StealthyFetcher
 
 
 def _wiki_url(title: str) -> str:
@@ -141,7 +141,7 @@ def get_player_wiki(name: str) -> dict[str, Any]:
     Returns:
         dict with keys: name, found, experience, awards, wiki_url
     """
-    Camoufox = _get_camoufox()
+    StealthyFetcher = _get_stealthy_fetcher()
     result: dict[str, Any] = {
         'name': name,
         'found': False,
@@ -151,93 +151,77 @@ def get_player_wiki(name: str) -> dict[str, Any]:
         'league': 'wiki',
     }
 
-    with Camoufox(headless=True) as browser:
-        page = browser.new_page()
+    # 嘗試直接訪問球員頁面
+    try:
+        page = StealthyFetcher.fetch(_wiki_url(name), headless=True, wait=10000)
+    except Exception as e:
+        result['error'] = f'Failed to load page: {e}'
+        return result
 
-        # 嘗試直接訪問球員頁面
+    content_div = page.css('#mw-content-text')
+    if not content_div:
+        return result
+
+    text = content_div[0].get_all_text() if content_div else ''
+
+    # 如果頁面不存在，嘗試搜尋
+    if '沒有內容' in text or '此頁目前沒有內容' in text:
         try:
-            page.goto(_wiki_url(name), timeout=60000)
-            page.wait_for_timeout(10000)
-        except Exception as e:
-            result['error'] = f'Failed to load page: {e}'
-            browser.close()
+            search_page = StealthyFetcher.fetch(
+                f'{WIKI_BASE}?title=特殊:搜尋&search={urllib.parse.quote(name)}',
+                headless=True,
+                wait=10000,
+            )
+        except Exception:
             return result
 
-        try:
-            content_div = page.query_selector('#mw-content-text')
-        except Exception:
-            content_div = None
-        if not content_div:
-            browser.close()
-            return result
+        search_text = ''
+        search_content = search_page.css('#mw-content-text')
+        if search_content:
+            search_text = search_content[0].get_all_text()
 
-        try:
-            text = content_div.inner_text()
-        except Exception:
-            text = ''
-
-        # 如果頁面不存在，嘗試搜尋
-        if '沒有內容' in text or '此頁目前沒有內容' in text:
-            try:
-                page.goto(
-                    f'{WIKI_BASE}?title=特殊:搜尋&search={urllib.parse.quote(name)}',
-                    timeout=60000,
-                )
-                page.wait_for_timeout(10000)
-            except Exception:
-                browser.close()
-                return result
-
-            try:
-                text = page.inner_text('#mw-content-text')
-            except Exception:
-                text = ''
-
-            # 嘗試找到匹配的結果
-            from bs4 import BeautifulSoup
-            try:
-                soup = BeautifulSoup(page.content(), 'lxml')
-            except Exception:
-                browser.close()
-                return result
-
-            for link in soup.find_all('a', href=True):
-                href = link['href']
-                title_text = link.get_text(strip=True)
-                if name in title_text and '/wiki/' in href:
-                    full_url = f'https://wikibasketball.dils.tku.edu.tw{href}' if href.startswith('/') else href
-                    try:
-                        page.goto(full_url, timeout=60000)
-                        page.wait_for_timeout(10000)
-                    except Exception:
-                        continue
-                    result['wiki_url'] = full_url
-                    result['name'] = title_text
-                    break
-            else:
-                browser.close()
-                return result
-
-        result['found'] = True
-
-        # 用 BeautifulSoup 解析 HTML
+        # 嘗試找到匹配的結果
         from bs4 import BeautifulSoup
-        soup = BeautifulSoup(page.content(), 'lxml')
-        content = soup.find('div', id='mw-content-text')
+        try:
+            soup = BeautifulSoup(page.get_all_text(), 'lxml')
+        except Exception:
+            return result
 
-        # 1. 解析經歷
-        for heading in content.find_all('h2'):
-            span = heading.find('span', class_='mw-headline')
-            if span and '經歷' in span.get_text() and '籃球' not in span.get_text():
-                dl = heading.find_next_sibling('dl')
-                if dl:
-                    result['experience'] = _parse_experience(dl)
+        for link in soup.find_all('a', href=True):
+            href = link['href']
+            title_text = link.get_text(strip=True)
+            if name in title_text and '/wiki/' in href:
+                full_url = f'https://wikibasketball.dils.tku.edu.tw{href}' if href.startswith('/') else href
+                try:
+                    page = StealthyFetcher.fetch(full_url, headless=True, wait=10000)
+                except Exception:
+                    continue
+                result['wiki_url'] = full_url
+                result['name'] = title_text
                 break
+        else:
+            return result
 
-        # 2. 解析獎項
-        result['awards'] = _parse_awards(content)
+    result['found'] = True
 
-        browser.close()
+    # 用 BeautifulSoup 解析 HTML
+    from bs4 import BeautifulSoup
+    # page.get() returns the HTML of the first matched element
+    html_content = page.css('#mw-content-text').get() or ''
+    soup = BeautifulSoup(html_content, 'lxml')
+    content = soup.find('div', id='mw-content-text') if soup.find('div', id='mw-content-text') else soup
+
+    # 1. 解析經歷
+    for heading in content.find_all('h2'):
+        span = heading.find('span', class_='mw-headline')
+        if span and '經歷' in span.get_text() and '籃球' not in span.get_text():
+            dl = heading.find_next_sibling('dl')
+            if dl:
+                result['experience'] = _parse_experience(dl)
+            break
+
+    # 2. 解析獎項
+    result['awards'] = _parse_awards(content)
 
     return result
 
@@ -248,45 +232,43 @@ def search_player_wiki(name: str, limit: int = 10) -> list[dict]:
     Returns:
         list of [{title, url, snippet}]
     """
-    Camoufox = _get_camoufox()
+    StealthyFetcher = _get_stealthy_fetcher()
     results = []
 
-    with Camoufox(headless=True) as browser:
-        page = browser.new_page()
-        page.goto(
-            f'{WIKI_BASE}?title=特殊:搜尋&search={urllib.parse.quote(name)}',
-            timeout=60000,
-        )
-        page.wait_for_timeout(10000)
+    page = StealthyFetcher.fetch(
+        f'{WIKI_BASE}?title=特殊:搜尋&search={urllib.parse.quote(name)}',
+        headless=True,
+        wait=10000,
+    )
 
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(page.content(), 'lxml')
-        content = soup.find('div', class_='searchresults')
+    from bs4 import BeautifulSoup
+    # Use the full page HTML for parsing
+    full_html = page.get() if hasattr(page, 'get') else ''
+    soup = BeautifulSoup(full_html, 'lxml')
+    content = soup.find('div', class_='searchresults')
 
-        if not content:
-            # 嘗試另一種結構
-            content = soup.find('div', id='mw-content-text')
+    if not content:
+        # 嘗試另一種結構
+        content = soup.find('div', id='mw-content-text')
 
-        if content:
-            for link in content.find_all('a', href=True):
-                href = link['href']
-                title = link.get_text(strip=True)
-                if '/wiki/' in href and title and name in title:
-                    full_url = f'https://wikibasketball.dils.tku.edu.tw{href}' if href.startswith('/') else href
-                    snippet = ''
-                    # 找摘要
-                    parent = link.find_parent('div')
-                    if parent:
-                        snippet = parent.get_text(strip=True)[:200]
-                    results.append({
-                        'title': title,
-                        'url': full_url,
-                        'snippet': snippet,
-                    })
-                    if len(results) >= limit:
-                        break
-
-        browser.close()
+    if content:
+        for link in content.find_all('a', href=True):
+            href = link['href']
+            title = link.get_text(strip=True)
+            if '/wiki/' in href and title and name in title:
+                full_url = f'https://wikibasketball.dils.tku.edu.tw{href}' if href.startswith('/') else href
+                snippet = ''
+                # 找摘要
+                parent = link.find_parent('div')
+                if parent:
+                    snippet = parent.get_text(strip=True)[:200]
+                results.append({
+                    'title': title,
+                    'url': full_url,
+                    'snippet': snippet,
+                })
+                if len(results) >= limit:
+                    break
 
     return results
 

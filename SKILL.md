@@ -2,7 +2,7 @@
 name: taiwan-basketball
 description: "Taiwan professional basketball stats, scores, schedules, player data, live scores, box scores, notifications, and transactions for PLG and TPBL."
 tags: ["plg", "tpbl", "basketball", "taiwan", "sports", "scores", "standings"]
-version: 1.3.2
+version: 1.3.3
 ---
 
 # Taiwan Basketball Skill - 台灣職籃資訊查詢 🏀
@@ -15,7 +15,7 @@ Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, sche
 |--------|-------------|
 | PLG official website | HTML scraping (server-side rendered) |
 | TPBL official REST API | `api.tpbl.basketball` |
-| 台灣籃球維基館 | Camoufox (bypasses Anubis protection) |
+| 台灣籃球維基館 | Scrapling StealthyFetcher (bypasses Anubis protection) |
 | Local SQLite DB | `~/.local/share/taiwan-basketball/basketball.db` |
 
 ## Features
@@ -32,7 +32,7 @@ Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, sche
 | **Box Score** ✨ | `basketball_boxscore.py` | TPBL API / PLG website |
 | **Notifications** ✨ | `basketball_notify.py` | PLG website / TPBL API |
 | **Transactions** ✨ | `basketball_transactions.py` | PLG news / TPBL API |
-| **Wiki (awards/history)** ✨ | `_wiki_api.py` | 台灣籃球維基館 (Camoufox) |
+| **Wiki (awards/history)** ✨ | `_wiki_api.py` | 台灣籃球維基館 (Scrapling StealthyFetcher) |
 
 ## Architecture
 
@@ -43,7 +43,7 @@ scripts/
   _utils.py            # 共用工具（格式化、球隊別名、球員別名、並行擷取）
   _tpbl_api.py         # TPBL REST API 封裝
   _plg_api.py          # PLG HTML 爬蟲封裝
-  _wiki_api.py         # 台灣籃球維基館（Camoufox 繞過 Anubis）
+  _wiki_api.py         # 台灣籃球維基館（Scrapling StealthyFetcher 繞過 Anubis）
   _basketball_api.py   # 兼容性匯入層（維持所有腳本相容）
   _db.py               # SQLite 資料持久化模組
   basketball_*.py      # CLI 腳本
@@ -249,7 +249,7 @@ Cross-league name resolution for naturalized/foreign players:
 ## 台灣籃球維基館 (Wiki)
 
 台灣籃球維基館 (`wikibasketball.dils.tku.edu.tw`) uses Anubis protection that blocks `web_fetch` and Playwright.
-**Use Camoufox (shared with CPBL skill's venv) to access it.**
+**Use Scrapling StealthyFetcher (shared with CPBL skill's venv) to access it.**
 
 ### When to query the wiki
 
@@ -261,22 +261,22 @@ Cross-league name resolution for naturalized/foreign players:
 
 ### How to query
 
-Use the CPBL venv's Camoufox (`skills/cpbl/.venv`). Do NOT use `web_fetch` or Playwright for wiki pages.
+Use the CPBL venv's Scrapling (`skills/cpbl/.venv`). Do NOT use `web_fetch` or Playwright for wiki pages.
 
 ```python
-from camoufox.sync_api import Camoufox
+from scrapling.fetchers import StealthyFetcher
 
-with Camoufox(headless=True) as browser:
-    page = browser.new_page()
-    page.goto('https://wikibasketball.dils.tku.edu.tw/wiki/index.php?title=林書豪', timeout=60000)
-    page.wait_for_timeout(10000)
-    text = page.inner_text('#mw-content-text')
-    browser.close()
+page = StealthyFetcher.fetch(
+    'https://wikibasketball.dils.tku.edu.tw/wiki/index.php?title=林書豪',
+    headless=True,
+    wait=10000,
+)
+text = page.css('#mw-content-text')[0].get_all_text()
 ```
 
 ### Limitations
 
-- Camoufox startup is slow (10-15 seconds), not suitable for frequent queries
+- StealthyFetcher startup is slow (10-15 seconds), not suitable for frequent queries
 - Player page names may differ from common names (e.g. 飛米 has no wiki page)
 - Experience parsing is still being improved (wiki link syntax handling)
 
