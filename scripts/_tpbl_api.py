@@ -391,10 +391,26 @@ class TPBLAPI:
                 sd.pop('_best_div_gp', None)
 
         name_lower = name.lower().strip()
-        matches = [
-            v for k, v in all_stats.items()
-            if name_lower in k.lower() or k.lower() in name_lower
-        ]
+
+        # 別名解析：歸化改名、跨聯盟不同譯名
+        search_names = [name]
+        from _utils import resolve_player_alias
+        alias_results = resolve_player_alias(name)
+        for league, official in alias_results:
+            if league == 'tpbl' and official != name:
+                search_names.append(official)
+
+        matches = []
+        seen_keys = set()
+        for search_name in search_names:
+            sn_lower = search_name.lower().strip()
+            for k, v in all_stats.items():
+                if k in seen_keys:
+                    continue
+                if sn_lower in k.lower() or k.lower() in sn_lower:
+                    matches.append(v)
+                    seen_keys.add(k)
+
         if not matches:
             matches = [v for v in all_stats.values() if name in v.get('team', '')]
         if not matches:
@@ -438,6 +454,7 @@ class TPBLAPI:
 
             seasons_list.append({
                 'season': slabel,
+                'team': sd.get('team', ''),
                 'gp': gp,
                 'avg_minutes': (
                     _sec_to_mmss(avg.get('time_on_court', 0))

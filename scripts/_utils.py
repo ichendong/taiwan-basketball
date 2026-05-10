@@ -59,6 +59,59 @@ STAGE_NAMES = {
     'finals': '總冠軍賽',
 }
 
+# ─── 球員別名對照表 ───
+# 歸化改名、跨聯盟不同譯名、洋將暱稱
+# key = 別名, value = [聯盟, 正式名]
+PLAYER_ALIASES: dict[str, list[tuple[str, str]]] = {}
+
+def _register_player_aliases(alias_map: dict[str, str | list[str]], league: str):
+    """註冊球員別名
+    alias_map: {正式名: 別名或別名列表}
+    league: 'plg' 或 'tpbl'
+    """
+    for official, aliases in alias_map.items():
+        if isinstance(aliases, str):
+            aliases = [aliases]
+        # 正式名本身也要能查到
+        if official not in PLAYER_ALIASES:
+            PLAYER_ALIASES[official] = [(league, official)]
+        for alias in aliases:
+            alias_lower = alias.lower()
+            if alias_lower not in PLAYER_ALIASES:
+                PLAYER_ALIASES[alias_lower] = []
+            PLAYER_ALIASES[alias_lower].append((league, official))
+
+# PLG 別名
+_register_player_aliases({
+    '吉爾貝克': ['高柏鎧', 'Gilbeck', 'Brandon Gilbeck'],
+    '飛米': ['Flymy', 'Ironmy'],
+    '魔獸': ['Howard', 'Dwight Howard'],
+    '牧磨': ['Mumo'],
+}, league='plg')
+
+# TPBL 別名
+_register_player_aliases({
+    '高柏鎧': ['吉爾貝克', 'Gilbeck', 'Brandon Gilbeck'],
+    '魔獸': ['Howard', 'Dwight Howard'],
+}, league='tpbl')
+
+
+def resolve_player_alias(name: str) -> list[tuple[str, str]]:
+    """解析球員別名，回傳 [(聯盟, 正式名), ...]
+    如果找不到別名，回傳空列表（表示要用原名搜尋）
+    """
+    name_stripped = name.strip()
+    results = []
+    # 精確匹配（不分大小寫）
+    matches = PLAYER_ALIASES.get(name_stripped.lower(), [])
+    if matches:
+        return matches
+    # 原名也試試看
+    matches = PLAYER_ALIASES.get(name_stripped, [])
+    if matches:
+        return matches
+    return []
+
 
 def _sec_to_mmss(seconds: float) -> str:
     """秒數轉 MM:SS 格式"""

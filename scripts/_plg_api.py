@@ -409,7 +409,10 @@ class PLGAPI:
     # ─── 球員搜尋 ───
 
     def search_player(self, name: str) -> list[dict]:
-        """搜尋球員，回傳匹配的球員列表 [{name, player_id, url}]"""
+        """搜尋球員，回傳匹配的球員列表 [{name, player_id, url}]
+        支援別名搜尋（歸化改名、洋將譯名等）
+        """
+        from _utils import resolve_player_alias
         name = name.strip()
         players: dict[str, dict] = {}
         for path in ('/stat-player', '/all-players'):
@@ -433,10 +436,19 @@ class PLGAPI:
                 continue
 
         results = []
-        name_lower = name.lower()
-        for p in players.values():
-            if name in p['name'] or p['name'] in name or name_lower in p['name'].lower():
-                results.append(p)
+        # 先用別名解析，展開成多個搜尋名
+        search_names = [name]
+        alias_results = resolve_player_alias(name)
+        for league, official in alias_results:
+            if league == 'plg' and official != name:
+                search_names.append(official)
+
+        for search_name in search_names:
+            name_lower = search_name.lower()
+            for p in players.values():
+                if search_name in p['name'] or p['name'] in search_name or name_lower in p['name'].lower():
+                    if p not in results:
+                        results.append(p)
         return results
 
     def get_player_stats_by_id(self, player_id: str, season: str | None = None) -> dict:
