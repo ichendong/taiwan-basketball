@@ -155,40 +155,62 @@ def get_player_wiki(name: str) -> dict[str, Any]:
         page = browser.new_page()
 
         # 嘗試直接訪問球員頁面
-        page.goto(_wiki_url(name), timeout=60000)
-        page.wait_for_timeout(10000)
+        try:
+            page.goto(_wiki_url(name), timeout=60000)
+            page.wait_for_timeout(10000)
+        except Exception as e:
+            result['error'] = f'Failed to load page: {e}'
+            browser.close()
+            return result
 
-        content_div = page.query_selector('#mw-content-text')
+        try:
+            content_div = page.query_selector('#mw-content-text')
+        except Exception:
+            content_div = None
         if not content_div:
             browser.close()
             return result
 
-        text = content_div.inner_text()
+        try:
+            text = content_div.inner_text()
+        except Exception:
+            text = ''
 
         # 如果頁面不存在，嘗試搜尋
         if '沒有內容' in text or '此頁目前沒有內容' in text:
-            page.goto(
-                f'{WIKI_BASE}?title=特殊:搜尋&search={urllib.parse.quote(name)}',
-                timeout=60000,
-            )
-            page.wait_for_timeout(10000)
-            text = content_div.inner_text()
+            try:
+                page.goto(
+                    f'{WIKI_BASE}?title=特殊:搜尋&search={urllib.parse.quote(name)}',
+                    timeout=60000,
+                )
+                page.wait_for_timeout(10000)
+            except Exception:
+                browser.close()
+                return result
+
+            try:
+                text = page.inner_text('#mw-content-text')
+            except Exception:
+                text = ''
 
             # 嘗試找到匹配的結果
             from bs4 import BeautifulSoup
-            soup = BeautifulSoup(page.content(), 'lxml')
+            try:
+                soup = BeautifulSoup(page.content(), 'lxml')
+            except Exception:
+                browser.close()
+                return result
 
-            # 搜尋結果中的連結
             for link in soup.find_all('a', href=True):
                 href = link['href']
                 title_text = link.get_text(strip=True)
                 if name in title_text and '/wiki/' in href:
-                    # 找到匹配的頁面，重新訪問
                     full_url = f'https://wikibasketball.dils.tku.edu.tw{href}' if href.startswith('/') else href
-                    page.goto(full_url, timeout=60000)
-                    page.wait_for_timeout(10000)
-                    content_div = page.query_selector('#mw-content-text')
-                    text = content_div.inner_text()
+                    try:
+                        page.goto(full_url, timeout=60000)
+                        page.wait_for_timeout(10000)
+                    except Exception:
+                        continue
                     result['wiki_url'] = full_url
                     result['name'] = title_text
                     break
