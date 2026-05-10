@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -30,11 +31,24 @@ _GAMES_HEADERS = {
 }
 
 
-def fetch_results(league: str, team=None):
+def fetch_results(league: str, team=None, date_filter=None):
     api = get_league_api(league)
     results = api.get_results(team=team)
+    # 也撈今天進行中的比賽
+    try:
+        live = api.get_live_games()
+        for g in live:
+            g['league'] = league
+            g['status'] = g.get('status', 'live')
+            if 'stage' not in g:
+                g['stage'] = 'live'
+            results.append(g)
+    except Exception:
+        pass
     for r in results:
         r['league'] = league
+    if date_filter:
+        results = [r for r in results if r.get('date') == date_filter]
     return results
 
 
@@ -52,6 +66,7 @@ def main():
   uv run scripts/basketball_games.py -l all --last 10 --format table
   uv run scripts/basketball_games.py -l all --stage play-in
   uv run scripts/basketball_games.py -l tpbl --stage playoffs
+  uv run scripts/basketball_games.py -l tpbl --date 2026-05-10
         '''
     )
 
@@ -61,6 +76,8 @@ def main():
     parser.add_argument('--team', '-t', type=str, help='球隊名過濾（支援簡稱）')
     parser.add_argument('--last', '-n', type=int, default=0,
                         help='只顯示最近 N 場比賽結果（預設全部）')
+    parser.add_argument('--date', '-d', type=str, default=None,
+                        help='指定日期（YYYY-MM-DD），例如 2026-05-10')
     parser.add_argument('--stage', '-s', type=str, default=None,
                         choices=['regular', 'playoffs', 'play-in', 'finals', 'preseason'],
                         help='賽制過濾（例行賽/季後賽/季後挑戰賽/總冠軍賽/熱身賽）')
@@ -86,7 +103,7 @@ def main():
         leagues = ['plg', 'tpbl'] if args.league == 'all' else [normalize_league(args.league)]
 
         def _fetch_results(league: str) -> list:
-            return fetch_results(league, team)
+            return fetch_results(league, team, date_filter=args.date)
 
         all_results = []
         for league, results in fetch_leagues_parallel(leagues, _fetch_results):
@@ -121,4 +138,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

@@ -61,7 +61,10 @@ def main() -> None:
         '--format', '-f', default='json',
         choices=['json', 'table'], help='輸出格式（預設 json）',
     )
-    parser.add_argument('--no-cache', action='store_true', help='停用快取')
+    parser.add_argument('--no-cache', action='store_true', default=True,
+                        help='停用快取（即時比分預設不快取）')
+    parser.add_argument('--cache', dest='no_cache', action='store_false',
+                        help='啟用快取（比分可能延遲）')
     parser.add_argument('--debug', action='store_true', help='開啟 debug 輸出')
     args = parser.parse_args()
 

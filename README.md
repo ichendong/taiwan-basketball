@@ -4,7 +4,7 @@ OpenClaw Agent Skill — 台灣職業籃球資訊查詢，支援 PLG（P. LEAGUE
 
 ## 版本
 
-v1.3.0
+v1.3.1
 
 ## 完整文件
 
@@ -64,6 +64,14 @@ uv run scripts/basketball_transactions.py --league all
 ```
 
 ## 更新紀錄
+
+### v1.3.1 (2026-05-10)
+
+**修復**
+
+- 🐛 `basketball_games.py` 新增 `--date` 參數，支援指定日期查詢比賽結果
+- 🐛 `basketball_games.py` 現在也會包含正在進行中的比賽（之前只回傳 COMPLETED 的比賽）
+- 🐛 `basketball_live.py` 預設 `--no-cache`，即時比分不再使用快取資料
 
 ### v1.3.0 (2026-05-11)
 
