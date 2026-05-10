@@ -1,3 +1,10 @@
+---
+name: taiwan-basketball
+description: "Taiwan professional basketball stats, scores, schedules, player data, live scores, box scores, notifications, and transactions for PLG and TPBL."
+tags: ["plg", "tpbl", "basketball", "taiwan", "sports", "scores", "standings"]
+version: 1.3.0
+---
+
 # Taiwan Basketball Skill - 台灣職籃資訊查詢 🏀
 
 Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, schedules, standings, player stats, league leaders, live scores, box scores, notifications, and transactions.
