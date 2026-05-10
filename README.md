@@ -4,7 +4,7 @@ OpenClaw Agent Skill — 台灣職業籃球資訊查詢，支援 PLG（P. LEAGUE
 
 ## 版本
 
-v1.3.1
+v1.3.2
 
 ## 完整文件
 
@@ -21,7 +21,7 @@ v1.3.1
 | 排行榜 | 得分王、籃板王、助攻王等 |
 | 球員比較 | 兩位球員對比 |
 | 即時比分 | 進行中的比賽分數 |
-| Box Score | 單場詳細球員數據 |
+| Box Score ✨ | 單場詳細球員數據（TPBL 用 Camoufox 爬取） |
 | 比賽提醒 | 訂閱球隊、自動通知 |
 | 球員異動 | 交易、簽約、轉隊 |
 | 賽制過濾 ✨ | 例行賽、季後賽、季後挑戰賽、總冠軍賽、熱身賽 |
@@ -64,6 +64,15 @@ uv run scripts/basketball_transactions.py --league all
 ```
 
 ## 更新紀錄
+
+### v1.3.2 (2026-05-10)
+
+**新功能**
+
+- 🐛 TPBL Box Score 改用 Camoufox 爬蟲！不再依賴不開放的 API 端點
+  - 新增 `_tpbl_boxscore_scraper.py` 模組，用 Camoufox 渲染 JS 頁面並爬取完整球員數據
+  - `basketball_boxscore.py --league tpbl --game-id 6316` 現在可以正常顯示整場 Box Score
+  - 自動 fallback：API 撈不到時自動切 Camoufox 爬蟲
 
 ### v1.3.1 (2026-05-10)
 

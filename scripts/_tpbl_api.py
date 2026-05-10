@@ -272,8 +272,24 @@ class TPBLAPI:
         if player_stats:
             result['players'] = self._parse_boxscore_players(player_stats)
         else:
-            result['players'] = []
-            result['note'] = 'Box Score 資料目前不可用（API 尚不支援此端點）'
+            # API 撈不到，改用 Camoufox 爬頁面
+            try:
+                from _tpbl_boxscore_scraper import scrape_boxscore
+                scraped = scrape_boxscore(game_id)
+                if scraped:
+                    result['players'] = scraped
+                    result['note'] = 'Box Score 資料來自 Camoufox 爬蟲（API 不支援此端點）'
+                else:
+                    result['players'] = []
+                    result['note'] = 'Box Score 資料目前不可用'
+            except ImportError as e:
+                _debug_log(f'TPBL boxscore: Camoufox scraper import failed: {e}')
+                result['players'] = []
+                result['note'] = 'Box Score 資料目前不可用（API 不支援此端點，Camoufox scraper 未安裝）'
+            except Exception as e:
+                _debug_log(f'TPBL boxscore: Camoufox scrape failed: {e}')
+                result['players'] = []
+                result['note'] = f'Box Score 爬取失敗：{e}'
 
         return result
 
