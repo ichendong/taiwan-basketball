@@ -19,13 +19,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _basketball_api import (
-    get_league_api, LEAGUE_NAMES, resolve_team, normalize_league,
+    get_league_api, LEAGUE_NAMES, STAGE_NAMES, resolve_team, normalize_league,
     disable_cache, format_table, fetch_leagues_parallel,
 )
 
-_GAMES_COLUMNS = ['league', 'date', 'weekday', 'away_team', 'away_score', 'home_score', 'home_team', 'venue']
+_GAMES_COLUMNS = ['league', 'date', 'stage', 'away_team', 'away_score', 'home_score', 'home_team', 'venue']
 _GAMES_HEADERS = {
-    'league': '聯盟', 'date': '日期', 'weekday': '星期',
+    'league': '聯盟', 'date': '日期', 'stage': '賽制', 'weekday': '星期',
     'away_team': '客隊', 'away_score': '客分', 'home_score': '主分', 'home_team': '主隊', 'venue': '場館',
 }
 
@@ -50,6 +50,8 @@ def main():
   uv run scripts/basketball_games.py --league all --last 5
   uv run scripts/basketball_games.py -l tpbl --team 戰神
   uv run scripts/basketball_games.py -l all --last 10 --format table
+  uv run scripts/basketball_games.py -l all --stage play-in
+  uv run scripts/basketball_games.py -l tpbl --stage playoffs
         '''
     )
 
@@ -59,6 +61,9 @@ def main():
     parser.add_argument('--team', '-t', type=str, help='球隊名過濾（支援簡稱）')
     parser.add_argument('--last', '-n', type=int, default=0,
                         help='只顯示最近 N 場比賽結果（預設全部）')
+    parser.add_argument('--stage', '-s', type=str, default=None,
+                        choices=['regular', 'playoffs', 'play-in', 'finals', 'preseason'],
+                        help='賽制過濾（例行賽/季後賽/季後挑戰賽/總冠軍賽/熱身賽）')
     parser.add_argument('--format', '-f', type=str, default='json',
                         choices=['json', 'table'], help='輸出格式（預設 json）')
     parser.add_argument('--no-cache', action='store_true', help='停用快取')
@@ -91,11 +96,19 @@ def main():
         # 按日期排序（最新在前）
         all_results.sort(key=lambda x: x.get('date', ''), reverse=True)
 
+        if args.stage:
+            all_results = [g for g in all_results if g.get('stage') == args.stage]
+
         if args.last > 0:
             all_results = all_results[:args.last]
 
         if not all_results:
             print('⚠️ 目前沒有符合條件的比賽結果', file=sys.stderr)
+
+        # 賽制中文化（過濾後再轉換）
+        for r in all_results:
+            if 'stage' in r:
+                r['stage'] = STAGE_NAMES.get(r['stage'], r['stage'])
 
         if args.format == 'table':
             print(format_table(all_results, _GAMES_COLUMNS, _GAMES_HEADERS))

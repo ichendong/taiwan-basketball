@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _basketball_api import (
-    get_league_api, LEAGUE_NAMES, resolve_team, normalize_league,
+    get_league_api, LEAGUE_NAMES, STAGE_NAMES, resolve_team, normalize_league,
     disable_cache, get_next_game, format_table, fetch_leagues_parallel,
 )
 
@@ -47,9 +47,9 @@ def _add_countdown(game: dict) -> None:
     except (ValueError, KeyError):
         pass
 
-_SCHEDULE_COLUMNS = ['league', 'date', 'weekday', 'time', 'away_team', 'home_team', 'venue', 'countdown']
+_SCHEDULE_COLUMNS = ['league', 'date', 'stage', 'weekday', 'time', 'away_team', 'home_team', 'venue', 'countdown']
 _SCHEDULE_HEADERS = {
-    'league': '聯盟', 'date': '日期', 'weekday': '星期', 'time': '時間',
+    'league': '聯盟', 'date': '日期', 'stage': '賽制', 'weekday': '星期', 'time': '時間',
     'away_team': '客隊', 'home_team': '主隊', 'venue': '場館', 'countdown': '倒數',
 }
 
@@ -58,14 +58,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='台灣職籃賽程查詢',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='''
-範例:
-  uv run scripts/basketball_schedule.py --league plg
-  uv run scripts/basketball_schedule.py --league tpbl
-  uv run scripts/basketball_schedule.py --league all
-  uv run scripts/basketball_schedule.py -l tpbl --team 戰神
-  uv run scripts/basketball_schedule.py -l all --format table
-        '''
+        epilog='''\n範例:\n  uv run scripts/basketball_schedule.py --league plg\n  uv run scripts/basketball_schedule.py --league tpbl\n  uv run scripts/basketball_schedule.py --league all\n  uv run scripts/basketball_schedule.py -l tpbl --team 戰神\n  uv run scripts/basketball_schedule.py -l all --format table\n  uv run scripts/basketball_schedule.py -l all --stage playoffs\n  uv run scripts/basketball_schedule.py -l all --next\n        '''
     )
 
     parser.add_argument('--league', '-l', type=str, required=True,
@@ -76,6 +69,9 @@ def main():
                         choices=['json', 'table'], help='輸出格式（預設 json）')
     parser.add_argument('--next', action='store_true',
                         help='只顯示最近一場比賽及倒數計時')
+    parser.add_argument('--stage', '-s', type=str, default=None,
+                        choices=['regular', 'playoffs', 'play-in', 'finals', 'preseason'],
+                        help='賽制過濾（例行賽/季後賽/季後挑戰賽/總冠軍賽/熱身賽')
     parser.add_argument('--no-cache', action='store_true', help='停用快取')
     parser.add_argument('--debug', action='store_true', help='開啟 debug 輸出')
 
@@ -116,6 +112,14 @@ def main():
             all_schedule.extend(schedule)
 
         all_schedule.sort(key=lambda x: (x.get('date', ''), x.get('time', '')))
+
+        if args.stage:
+            all_schedule = [g for g in all_schedule if g.get('stage') == args.stage]
+
+        # 賽制中文化（過濾後再轉換）
+        for g in all_schedule:
+            if 'stage' in g:
+                g['stage'] = STAGE_NAMES.get(g['stage'], g['stage'])
 
         if args.next:
             next_game = get_next_game(all_schedule)

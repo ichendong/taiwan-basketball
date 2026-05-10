@@ -92,12 +92,21 @@ class PLGAPI:
 
     # ─── 賽程 / 賽果 ───
 
-    def get_games(self) -> list[dict]:
-        """解析賽程頁面（/schedule），回傳所有比賽"""
+    # PLG 官網 URL 路由對應賽制
+    _STAGE_URLS = {
+        'preseason': '/schedule-pre-season/{season}',
+        'regular': '/schedule-regular-season/{season}',
+        'playoffs': '/schedule-playoffs/{season}',
+        'finals': '/schedule-finals/{season}',
+    }
+
+    # 預設抓的賽制頁面（例行賽 + 季後賽 + 總冠軍賽）
+    _DEFAULT_STAGES = ('regular', 'playoffs', 'finals')
+
+    def _parse_schedule_page(self, html: str, season_start: int, season_end: int, stage: str) -> list[dict]:
+        """解析單一賽制頁面的 HTML，回傳比賽列表"""
         from bs4 import BeautifulSoup
-        html = _fetch_html(f'{self.BASE_URL}/schedule', ttl=CACHE_TTL['schedule'])
         soup = BeautifulSoup(html, 'lxml')
-        season_start, season_end = self._derive_season_year(soup)
         games = []
 
         for row in soup.find_all('div', class_='match_row'):
@@ -177,6 +186,7 @@ class PLGAPI:
                     'home_team': home_name,
                     'venue': venue,
                     'game_id': game_id,
+                    'stage': stage,
                 }
 
                 if away_score is not None and home_score is not None:
@@ -193,10 +203,43 @@ class PLGAPI:
 
                 games.append(game)
             except (ValueError, IndexError, AttributeError) as e:
-                _debug_log(f'PLG get_games: skipping row due to {e}')
+                _debug_log(f'PLG _parse_schedule_page: skipping row due to {e}')
                 continue
 
         return games
+
+    def get_games(self, stages: Optional[tuple] = None) -> list[dict]:
+        """解析賽程頁面，回傳所有比賽（跨賽制頁面）
+
+        Args:
+            stages: 要抓的賽制 tuple，預設 ('regular', 'playoffs', 'finals')
+        """
+        # 先從主頁面取得賽季年份
+        from bs4 import BeautifulSoup
+        html = _fetch_html(f'{self.BASE_URL}/schedule', ttl=CACHE_TTL['schedule'])
+        soup = BeautifulSoup(html, 'lxml')
+        season_start, season_end = self._derive_season_year(soup)
+        season_str = f'{season_start}-{season_end - 2000:02d}'
+
+        stages = stages or self._DEFAULT_STAGES
+        all_games = []
+        for stage in stages:
+            url_template = self._STAGE_URLS.get(stage)
+            if not url_template:
+                continue
+            url = f'{self.BASE_URL}{url_template.format(season=season_str)}'
+            try:
+                stage_html = _fetch_html(url, ttl=CACHE_TTL['schedule'])
+                stage_games = self._parse_schedule_page(stage_html, season_start, season_end, stage)
+                all_games.extend(stage_games)
+                _debug_log(f'PLG {stage}: found {len(stage_games)} games')
+            except (urllib.error.URLError, ValueError) as e:
+                _debug_log(f'PLG {stage}: fetch error {e}')
+                continue
+
+        # 依日期排序
+        all_games.sort(key=lambda g: (g.get('date', ''), g.get('time', '')))
+        return all_games
 
     def get_schedule(self) -> list[dict]:
         """未來賽程"""

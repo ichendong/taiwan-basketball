@@ -13,6 +13,36 @@ from _http import _fetch_json_url
 from _utils import _safe_float, _safe_int, _sec_to_mmss
 
 
+def _stage_from_game(game: dict) -> str:
+    """從 TPBL game dict 推算賽制階段
+
+    division_id 對應:
+      8  = 熱身賽
+      9  = 例行賽（regular season）
+      11 = Play-In（季後挑戰賽）
+      12 = Playoffs（季後賽）
+
+    code 欄位也可輔助判斷:
+      G1~G7  = 該階段第 N 場
+      AG1~AG5 / BG1~BG5 = 季後賽 Group A/B 場次
+    """
+    div_id = game.get('division_id')
+    code = game.get('code') or ''
+    # division_id 直接對應賽制
+    _DIV_STAGE = {
+        8: 'preseason',
+        9: 'regular',
+        11: 'play-in',
+        12: 'playoffs',
+    }
+    if div_id in _DIV_STAGE:
+        return _DIV_STAGE[div_id]
+    # fallback: 用 code 推斷
+    if re.match(r'^[AB]G\d+$', code):
+        return 'playoffs'
+    return 'regular'
+
+
 class TPBLAPI:
     """TPBL 官方 REST API 封裝"""
 
@@ -75,6 +105,7 @@ class TPBLAPI:
                     'status': 'upcoming',
                     'round': g.get('round'),
                     'game_id': g.get('id'),
+                    'stage': _stage_from_game(g),
                 })
         return schedule
 
@@ -103,6 +134,7 @@ class TPBLAPI:
                 'venue': g.get('venue', ''),
                 'round': g.get('round'),
                 'game_id': g.get('id'),
+                'stage': _stage_from_game(g),
             })
         return results
 
@@ -131,6 +163,7 @@ class TPBLAPI:
                 'venue': g.get('venue', ''),
                 'status': 'live',
                 'round': g.get('round'),
+                'stage': _stage_from_game(g),
             })
         return live
 

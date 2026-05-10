@@ -51,6 +51,14 @@ LEAGUE_NAMES = {
     'tpbl': '台灣職業籃球大聯盟',
 }
 
+STAGE_NAMES = {
+    'preseason': '熱身賽',
+    'regular': '例行賽',
+    'play-in': '季後挑戰賽',
+    'playoffs': '季後賽',
+    'finals': '總冠軍賽',
+}
+
 
 def _sec_to_mmss(seconds: float) -> str:
     """秒數轉 MM:SS 格式"""
