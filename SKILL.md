@@ -14,6 +14,7 @@ Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, sche
 |--------|-------------|
 | PLG official website | HTML scraping (server-side rendered) |
 | TPBL official REST API | `api.tpbl.basketball` |
+| 台灣籃球維基館 | Camoufox (bypasses Anubis protection) |
 | Local SQLite DB | `~/.local/share/taiwan-basketball/basketball.db` |
 
 ## Features
@@ -30,6 +31,7 @@ Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, sche
 | **Box Score** ✨ | `basketball_boxscore.py` | TPBL API / PLG website |
 | **Notifications** ✨ | `basketball_notify.py` | PLG website / TPBL API |
 | **Transactions** ✨ | `basketball_transactions.py` | PLG news / TPBL API |
+| **Wiki (awards/history)** ✨ | `_wiki_api.py` | 台灣籃球維基館 (Camoufox) |
 
 ## Architecture
 
@@ -37,9 +39,10 @@ Query PLG (P. LEAGUE+) and TPBL (台灣職業籃球大聯盟) game results, sche
 scripts/
   _cache.py            # 磁碟 TTL 快取模組
   _http.py             # HTTP 工具（重試 / 快取）
-  _utils.py            # 共用工具（格式化、球隊別名、並行擷取）
+  _utils.py            # 共用工具（格式化、球隊別名、球員別名、並行擷取）
   _tpbl_api.py         # TPBL REST API 封裝
   _plg_api.py          # PLG HTML 爬蟲封裝
+  _wiki_api.py         # 台灣籃球維基館（Camoufox 繞過 Anubis）
   _basketball_api.py   # 兼容性匯入層（維持所有腳本相容）
   _db.py               # SQLite 資料持久化模組
   basketball_*.py      # CLI 腳本
@@ -284,4 +287,29 @@ Auto-installed via `uv`:
 - **Parallel fetch**: `--league all` queries run PLG and TPBL requests concurrently using `ThreadPoolExecutor`.
 - SBL (超級籃球聯賽) is not supported — official site (sleague.tw) is a Vue SPA with authenticated GraphQL API.
 - `avg_minutes` output is unified to `MM:SS` format for both leagues.
+
+## 台灣籃球維基館 (Wiki)
+
+台灣籃球維基館 (`wikibasketball.dils.tku.edu.tw`) 自 2026-05 起啟用 Anubis 防護機制。
+`web_fetch`、Playwright 無法存取該站。
+**使用 Camoufox（借用 CPBL skill 的 venv）可以正常讀取。**
+
+### 查詢維基館的方法
+
+1. **Camoufox** — 使用 CPBL venv 裡的 `camoufox`（路徑：`skills/cpbl/.venv`）
+2. `web_search` / `tavily_search` — 搜尋引擎快照
+3. 維基百科 (zh.wikipedia.org)
+
+### 用途
+
+- 球員歷年獎項（MVP、年度最佳陣容、阻攻王等）
+- 球隊歷年戰績
+- 歷史紀錄（大三元、20-20 等）
+- 歸化資訊、生涯轉隊經歷
+
+### 限制
+
+- Camoufox 啟動較慢（10-15秒），不適合頻繁查詢
+- 頁面解析仍在改進中（經歷格式需處理 wiki 連結語法）
+- 球員頁面名稱可能與搜尋名不同（如「飛米」在維基館可能不存在）
 
