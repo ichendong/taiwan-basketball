@@ -3,6 +3,14 @@ name: taiwan-basketball
 description: "Taiwan professional basketball stats, scores, schedules, player data, live scores, box scores, notifications, and transactions for PLG and TPBL."
 tags: ["plg", "tpbl", "basketball", "taiwan", "sports", "scores", "standings"]
 version: 1.3.3
+metadata:
+  openclaw:
+    emoji: 🏀
+    requires:
+      bins:
+        - uv
+      anyBins:
+        - python3
 ---
 
 # Taiwan Basketball Skill - 台灣職籃資訊查詢 🏀
@@ -258,6 +266,17 @@ Cross-league name resolution for naturalized/foreign players:
 - ✅ Player **awards** (MVP, Defensive Player of the Year, All-League teams, etc.)
 - ✅ **Naturalization** info, career team changes
 - ❌ Foreign/naturalized players may not have wiki pages (focus on domestic players)
+
+### Setup (首次使用前)
+
+維基館爬蟲依賴 CPBL skill venv 裡的 Scrapling stealth browser，需先安裝：
+
+```bash
+# 1. 建立 CPBL venv（如果不存在）
+cd skills/cpbl && uv venv && uv pip install -e .
+# 2. 安裝 stealth browser（Scrapling StealthyFetcher 需要）
+cd ../.. && skills/cpbl/.venv/bin/scrapling install --force
+```
 
 ### How to query
 
