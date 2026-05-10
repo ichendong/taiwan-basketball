@@ -97,14 +97,15 @@ def _register_player_aliases(alias_map: dict[str, str | list[str]], league: str)
 _register_player_aliases({
     '吉爾貝克': ['高柏鎧', 'Gilbeck', 'Brandon Gilbeck'],
     '飛米': ['Flymy', 'Ironmy'],
-    '魔獸': ['Howard', 'Dwight Howard'],
+    '魔獸': ['Howard', 'Dwight Howard', '霍華德'],
     '牧磨': ['Mumo'],
+    '戴維斯': ['Davis', 'Mike Davis'],
 }, league='plg')
 
 # TPBL 別名
 _register_player_aliases({
     '高柏鎧': ['吉爾貝克', 'Gilbeck', 'Brandon Gilbeck'],
-    '魔獸': ['Howard', 'Dwight Howard'],
+    '魔獸': ['Howard', 'Dwight Howard', '霍華德'],
 }, league='tpbl')
 
 
