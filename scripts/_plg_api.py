@@ -479,6 +479,31 @@ class PLGAPI:
             if '|' in t:
                 info['name'] = t.split('|')[0].strip()
 
+        # ─── 解析經歷區塊（球隊歷史）───
+        experience = []
+        exp_div = soup.find('div', id='player_experience')
+        if exp_div:
+            exp_text = exp_div.get_text(strip=True)
+            # 格式：「2025-26 PLG 臺北富邦勇士2022-24 PLG 高雄17直播鋼鐵人籃球隊」
+            # 或用 <br> 分隔
+            for br in exp_div.find_all('br'):
+                br.replace_with('\n')
+            exp_lines = exp_div.get_text(strip=True).split('\n')
+            for line in exp_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                # 格式：「YYYY-YY 聯盟 球隊名」
+                m = re.match(r'(\d{4}-\d{2,4})\s+(\S+)\s+(.+)', line)
+                if m:
+                    experience.append({
+                        'period': m.group(1),
+                        'league': m.group(2),
+                        'team': m.group(3),
+                    })
+        if experience:
+            info['experience'] = experience
+
         season_stats = []
         if len(tables) >= 3:
             cum_rows = tables[2].find_all('tr')[1:]
@@ -538,6 +563,57 @@ class PLGAPI:
             if s['season'] == 'career':
                 career = s
                 break
+
+        # ─── 解析經歷區塊（球隊歷史）並推算每季效力球隊 ───
+        experience = []
+        exp_div = soup.find('div', id='player_experience')
+        if exp_div:
+            exp_text = exp_div.get_text(separator='\n', strip=True)
+            lines = exp_text.split('\n')
+            in_experience = False
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                if line == '經歷':
+                    in_experience = True
+                    continue
+                if not in_experience:
+                    continue
+                # 格式：「YYYY-YY 聯盟 球隊名」或「YYYY-YYYY 聯盟 球隊名」
+                m = re.match(r'(\d{4}-\d{2,4})\s+(\S+)\s+(.+)', line)
+                if m:
+                    experience.append({
+                        'period': m.group(1),
+                        'league': m.group(2),
+                        'team': m.group(3),
+                    })
+        if experience:
+            info['experience'] = experience
+
+        # 用經歷推算每季效力球隊（覆蓋主頁顯示的現役球隊）
+        def _team_for_season(season: str, exp_list: list) -> str:
+            """根據經歷列表推算指定賽季的球隊"""
+            for exp in exp_list:
+                period = exp['period']
+                # 處理 '2022-24' 格式 → (2022, 2024)
+                parts = period.split('-')
+                start_year = int(parts[0])
+                end_year = int(parts[0][:2] + parts[1]) if len(parts[1]) == 2 else int(parts[1])
+                # 處理 season 格式 '2022-23' → (2022, 2023)
+                s_parts = season.split('-')
+                s_start = int(s_parts[0])
+                s_end = int(s_parts[0][:2] + s_parts[1]) if len(s_parts[1]) == 2 else int(s_parts[1])
+                if s_start >= start_year and s_end <= end_year + 1:
+                    return exp['team']
+            return ''
+
+        for s in regular:
+            sn = s.get('season', '')
+            if sn and sn != 'career' and experience:
+                team_from_exp = _team_for_season(sn, experience)
+                if team_from_exp:
+                    s['team'] = team_from_exp
 
         info['seasons'] = regular
         info['career'] = career
