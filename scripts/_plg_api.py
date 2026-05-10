@@ -502,30 +502,7 @@ class PLGAPI:
                 else:
                     info['name'] = _normalize_team_name(name_raw)
 
-        # ─── 解析經歷區塊（球隊歷史）───
-        experience = []
-        exp_div = soup.find('div', id='player_experience')
-        if exp_div:
-            exp_text = exp_div.get_text(strip=True)
-            # 格式：「2025-26 PLG 臺北富邦勇士2022-24 PLG 高雄17直播鋼鐵人籃球隊」
-            # 或用 <br> 分隔
-            for br in exp_div.find_all('br'):
-                br.replace_with('\n')
-            exp_lines = exp_div.get_text(strip=True).split('\n')
-            for line in exp_lines:
-                line = line.strip()
-                if not line:
-                    continue
-                # 格式：「YYYY-YY 聯盟 球隊名」
-                m = re.match(r'(\d{4}-\d{2,4})\s+(\S+)\s+(.+)', line)
-                if m:
-                    experience.append({
-                        'period': m.group(1),
-                        'league': m.group(2),
-                        'team': m.group(3),
-                    })
-        if experience:
-            info['experience'] = experience
+        # (經歷解析已移至 preciser 區塊後方)
 
         season_stats = []
         if len(tables) >= 3:
@@ -649,7 +626,11 @@ class PLGAPI:
                     continue
                 if not in_experience:
                     continue
+                # 格式1：「2022-24 PLG 高雄鋼鐵人」或「2023-24 PLG 新北國王」
                 m = re.match(r'(\d{4}-\d{2,4})\s+(\S+)\s+(.+)', line)
+                # 格式2：「2023 PLG 高雄鋼鐵人」（只有年份，沒有範圍）
+                if not m:
+                    m = re.match(r'(\d{4})\s+(\S+)\s+(.+)', line)
                 if m:
                     experience.append({
                         'period': m.group(1),
@@ -664,14 +645,29 @@ class PLGAPI:
             """根據經歷列表推算指定賽季的球隊"""
             for exp in exp_list:
                 period = exp['period']
+                # 只過濾同聯盟的經歷
+                if exp.get('league') != 'PLG':
+                    continue
                 parts = period.split('-')
-                start_year = int(parts[0])
-                end_year = int(parts[0][:2] + parts[1]) if len(parts[1]) == 2 else int(parts[1])
-                s_parts = season.split('-')
-                s_start = int(s_parts[0])
-                s_end = int(s_parts[0][:2] + s_parts[1]) if len(s_parts[1]) == 2 else int(s_parts[1])
-                if s_start >= start_year and s_end <= end_year + 1:
-                    return exp['team']
+                if len(parts) == 1:
+                    # 只有年份：「2023」→ 該年度的 PLG 賽季
+                    # PLG 賽季 2022-23 的年度是 2022（10月開始），但經歷寫 2023 代表 2022-23 賽季
+                    # 因為 PLG 2022-23 賽季在 2023 年結束
+                    year = int(parts[0])
+                    # 2023 → 可能是 2022-23 或 2023-24
+                    # 檢查 season 是否包含這個年份
+                    s_start = int(season.split('-')[0])
+                    s_end_year = int(season.split('-')[0][:2] + season.split('-')[1])
+                    if s_start == year or s_end_year == year or s_start == year - 1:
+                        return exp['team']
+                else:
+                    start_year = int(parts[0])
+                    end_year = int(parts[0][:2] + parts[1]) if len(parts[1]) == 2 else int(parts[1])
+                    s_parts = season.split('-')
+                    s_start = int(s_parts[0])
+                    s_end = int(s_parts[0][:2] + s_parts[1]) if len(s_parts[1]) == 2 else int(s_parts[1])
+                    if s_start >= start_year and s_end <= end_year + 1:
+                        return exp['team']
             return ''
 
         for s in regular:
