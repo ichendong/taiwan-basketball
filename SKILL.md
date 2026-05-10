@@ -211,8 +211,8 @@ Output JSON includes a `stage` field per game indicating the competition stage:
 |-------|------|
 | `regular` | 例行賽 |
 | `play-in` | 季後挑戰賽（TPBL）|
-| `playoffs` | 季後賽 |
-| `finals` | 總冠軍賽（PLG）|
+| `playoffs` | 季後賽（TPBL 此階段即總冠軍賽）|
+| `finals` | 總冠軍賽（PLG 專有）|
 | `preseason` | 熱身賽 |
 
 ## Caching
