@@ -2,7 +2,7 @@
 name: taiwan-basketball
 description: "Taiwan professional basketball stats, scores, schedules, player data, live scores, box scores, notifications, and transactions for PLG and TPBL."
 tags: ["plg", "tpbl", "basketball", "taiwan", "sports", "scores", "standings"]
-version: 1.3.4
+version: 1.3.5
 metadata:
   openclaw:
     emoji: 🏀
@@ -225,8 +225,8 @@ Output JSON includes a `stage` field per game indicating the competition stage:
 |-------|------|
 | `regular` | 例行賽 |
 | `play-in` | 季後挑戰賽（TPBL）|
-| `playoffs` | 季後賽（TPBL 此階段即總冠軍賽）|
-| `finals` | 總冠軍賽（PLG 專有）|
+| `playoffs` | 季後賽（四強）|
+| `finals` | 總冠軍賽 |
 | `preseason` | 熱身賽 |
 
 ## Per-Season Team Attribution
@@ -361,7 +361,7 @@ Auto-installed via `uv`:
 - **TPBL**: Official REST API at `api.tpbl.basketball`. Player stats via `/games/stats/players?division_id={id}` across all seasons.
 - **Team name normalization**: All PLG team names are normalized to remove "籃球隊" suffixes and English names for consistency.
 - **Player aliases**: Supports naturalized name changes (高柏鎧↔吉爾貝克) and cross-league translation names.
-- **Stage filter**: TPBL `playoffs` is the championship finals (no separate `finals` stage). PLG has both `playoffs` and `finals`.
+- **Stage filter**: TPBL now has separate `playoffs` (semifinals, div=12) and `finals` (championship, div=35). PLG has both `playoffs` and `finals`.
 - **Experience period formats**: PLG experience blocks support both `YYYY-YY` ranges and `YYYY` single-year formats (e.g. 林書豪's `2023 PLG 高雄17直播鋼鐵人`).
 - **Experience league filter**: Only PLG experience entries are used when determining PLG per-season teams (CBA/NBA entries are ignored).
 - **Retry**: All HTTP requests retry up to 3 times with exponential backoff on network errors.

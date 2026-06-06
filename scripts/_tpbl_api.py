@@ -21,7 +21,7 @@ def _stage_from_game(game: dict) -> str:
       9  = 例行賽（regular season）
       11 = Play-In（季後挑戰賽）
       12 = Playoffs（季後賽，四強）
-      35 = Playoffs（總冠軍賽）
+      35 = Finals（總冠軍賽）
 
     code 欄位也可輔助判斷:
       G1~G7  = 該階段第 N 場
@@ -35,7 +35,7 @@ def _stage_from_game(game: dict) -> str:
         9: 'regular',
         11: 'play-in',
         12: 'playoffs',
-        35: 'playoffs',
+        35: 'finals',
     }
     if div_id in _DIV_STAGE:
         return _DIV_STAGE[div_id]
