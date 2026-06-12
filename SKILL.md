@@ -2,7 +2,7 @@
 name: taiwan-basketball
 description: "Taiwan professional basketball stats, scores, schedules, player data, live scores, box scores, notifications, and transactions for PLG and TPBL."
 tags: ["plg", "tpbl", "basketball", "taiwan", "sports", "scores", "standings"]
-version: 1.3.5
+version: 1.3.6
 metadata:
   openclaw:
     emoji: 🏀

@@ -190,12 +190,20 @@ class PLGAPI:
                 }
 
                 if away_score is not None and home_score is not None:
-                    # PLG 官網未開打比賽也顯示 0:0
-                    # 完賽：至少一方分數 > 0；未打：0:0
                     if away_score > 0 or home_score > 0:
                         game['away_score'] = away_score
                         game['home_score'] = home_score
-                        game['status'] = 'completed'
+                        # 有分數不一定完賽 — PLG 官網賽程頁會顯示即時比分
+                        # 檢查比賽時間是否落在 live window 內，是的話標 live 而非 completed
+                        try:
+                            game_dt = parse_game_datetime(date_str, game_time)
+                            elapsed = (datetime.now() - game_dt).total_seconds()
+                            if 0 <= elapsed <= _LIVE_GAME_WINDOW_SECONDS:
+                                game['status'] = 'live'
+                            else:
+                                game['status'] = 'completed'
+                        except (ValueError, KeyError, TypeError):
+                            game['status'] = 'completed'
                     else:
                         game['status'] = 'upcoming'
                 else:

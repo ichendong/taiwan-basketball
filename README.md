@@ -4,7 +4,7 @@ OpenClaw Agent Skill — 台灣職業籃球資訊查詢，支援 PLG（P. LEAGUE
 
 ## 版本
 
-v1.3.3
+v1.3.6
 
 ## 完整文件
 
@@ -64,6 +64,15 @@ uv run scripts/basketball_transactions.py --league all
 ```
 
 ## 更新紀錄
+
+### v1.3.6 (2026-06-12)
+
+**Bug Fix**
+
+- 🐛 PLG 總冠軍賽 G4 即時比分誤判為「completed」— 已修復
+  - 根因：`_parse_schedule_page()` 看到 PLG 官網賽程頁的即時分數 > 0 就當作比賽結束
+  - 修法：比分 > 0 時再檢查比賽時間是否落在 live window（3 小時）內，是的話標 `live` 而非 `completed`
+  - 效果：`basketball_live.py` 現在能正確顯示 PLG 進行中比賽，`basketball_games.py` 不再誤報
 
 ### v1.3.3 (2026-05-11)
 
